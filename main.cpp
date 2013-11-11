@@ -758,7 +758,7 @@ void SmallOrc::setState(states state)
 {
 	this->state = state;
 	beginFrame = frame;
-	if (state == STANDING_LEFT || state == STANDING_RIGHT)
+	if (state == STANDING_LEFT || state == STANDING_RIGHT || state == RECOVER)
 		currentClip = 0;
 	else
 		currentClip = 4;
@@ -870,12 +870,17 @@ void EnemyManager::update()
 		if (checkCollision(player, enemy))
 		{
 			Player.damage(5);
-			Player.setXVel(enemy.x < player.x ? 4 : -4);
 			if (Player.getYVel() > 0)
+			{
 				Player.setYVel(-1*Player.getYVel());
+			}
+			if (Player.getYVel() == 0)
+			{
+				Player.setYVel(-10);
+			}
+			Player.setXVel(enemy.x < player.x ? 4 : -4);
+
 			orc->setState(orc->RECOVER);
-			orc->collision[LEFT] = true;
-			orc->collision[RIGHT] = true;
 			
 		}
 
