@@ -150,6 +150,8 @@ public:
 	SDL_Rect box;
 	int xvel, yvel;
 	int angle;
+
+	int damage;
 };
 
 void Weapon::init(SDL_Texture* texture, SDL_Rect box, float xvel, float yvel)
@@ -166,6 +168,8 @@ void Weapon::update()
 	box.x += xvel;
 	box.y += yvel;
 	angle += 50;
+	if (xvel == 0 && yvel == 0)
+		angle = 0;
 }
 
 void Weapon::draw()
@@ -204,6 +208,7 @@ private:
 	SDL_Texture* health_bar;
 
 	int beginFrame; //Used to know when buttons were pressed to regulate animation properly
+	int lastThrow;
 
 	//These are for preventing conflicts: walking and jumping, walking two directions, jumping twice, etc
 	bool jumping;
@@ -233,6 +238,10 @@ public:
 
 	void checkCollision();
 	bool collision[3];
+
+	SDL_Rect getNinjaStarBox();
+	void delNinjaStar();
+	int ninjaStarDamage();
 
 	//Health
 	void drawHealth();
@@ -283,6 +292,8 @@ Character::Character()
 	}
 
 	beginFrame = 0;
+	lastThrow = 0;
+
 	jumping = false;
 	falling = false;
 	jumpable = true;
@@ -297,6 +308,9 @@ Character::Character()
 	health = 100;
 	SDL_Rect temp = { 10, 40, health*3, 10 };
 	health_box = temp;
+
+	//Weapons
+	ninja_star.damage = 4;
 }
 
 void Character::init(int x, int y)
@@ -434,6 +448,7 @@ void Character::handleInput(SDL_Event event)
 			{
 				throwing = true;
 				ninja_star.init(ninja_star_texture, temp, xvel + delta_x*scale, delta_y*scale);
+				lastThrow = frame;
 			}
 		}
 	}
@@ -534,13 +549,10 @@ void Character::move()
 	if (ninja_star.texture != NULL)
 		ninja_star.update();
 
-	if (ninja_star.box.x > Camera.x + Camera.w ||
-		ninja_star.box.x < Camera.x - ninja_star.box.w ||
-		ninja_star.box.y < Camera.y - ninja_star.box.h ||
-		ninja_star.box.y > Camera.y + Camera.h)
+	if (frame - lastThrow > 80)
 	{
-		ninja_star.texture = NULL;
 		throwing = false;
+		delNinjaStar();
 	}
 }
 
@@ -593,6 +605,34 @@ void Character::checkCollision()
 			}
 		}
 	}
+
+	//Ninja star
+	index = (ninja_star.box.y/40)*LevelWidth/40 + (ninja_star.box.x/40);
+	if (index >= LevelSize || index < 0 || ninja_star.texture == NULL || CurrentLevel[index] == NULL)
+		return;
+
+	if (CurrentLevel[index]->collidable())
+	{
+		ninja_star.xvel = 0;
+		ninja_star.yvel = 0;
+	}
+}
+
+SDL_Rect Character::getNinjaStarBox()
+{
+	return ninja_star.box;
+}
+
+void Character::delNinjaStar()
+{
+	ninja_star.texture = NULL;
+	ninja_star.box.x = box.x;
+	ninja_star.box.y = box.y;
+}
+
+int Character::ninjaStarDamage()
+{
+	return ninja_star.damage;
 }
 
 void Character::drawHealth()
@@ -615,7 +655,7 @@ Character Player;
 class SmallOrc : public Moveable
 {
 public:
-	typedef enum { STANDING_LEFT, STANDING_RIGHT, RUNNING_LEFT, RUNNING_RIGHT, RECOVER } states;
+	typedef enum { STANDING_LEFT, STANDING_RIGHT, RUNNING_LEFT, RUNNING_RIGHT, RECOVER, DEAD} states;
 	typedef enum { LEFT = 0, RIGHT, BOTTOM } sides;
 	SmallOrc(SDL_Texture* texture, int x, int y);
 	void update();
@@ -624,25 +664,32 @@ public:
 	void setState(states state);
 	int getState();
 
-	bool collision[4];
+	bool collision[3];
+	int health;
 
 private:
 	states state;
 	SDL_RendererFlip flip;
+	int angle;
 
 	SDL_Texture* texture;
 	SDL_Rect clip[12];
 	int currentClip;
 	int index;
 	int beginFrame;
+
+	bool falling;
 };
 
 SmallOrc::SmallOrc(SDL_Texture *texture, int x, int y)
 {
 	state = STANDING_LEFT;
 	X_VELOCITY = 4;
+	Y_VELOCITY = -10;
 
 	index = 1;
+	angle = 0;
+	health = 10;
 
 	int idle_width = 48, idle_height = 72;
 	int run_width = 64, run_height = 72;
@@ -677,6 +724,11 @@ SmallOrc::SmallOrc(SDL_Texture *texture, int x, int y)
 
 	collision[LEFT] = false;
 	collision[RIGHT] = false;
+
+	ground_tile.w = 40;
+	ground_tile.h = 40;
+
+	falling = false;
 }
 
 void SmallOrc::update()
@@ -716,6 +768,22 @@ void SmallOrc::update()
 			xvel = X_VELOCITY;
 		}
 
+		if (falling)
+		{
+			yvel += 1;
+			if (collision[BOTTOM])
+			{
+				if (((box.x >= ground_tile.x && box.x <= ground_tile.x + ground_tile.w) ||
+					(box.x <= ground_tile.x && (box.x + box.w) >= ground_tile.x)) &&
+					box.y >= ground_tile.y - 50)
+				{
+					box.y = ground_tile.y - box.h+5;
+					yvel = 0;
+					falling = false;
+				}
+			}
+		}
+
 		if (frame-beginFrame > 60)
 		{
 			if (state == RUNNING_LEFT)
@@ -737,6 +805,12 @@ void SmallOrc::update()
 		}
 	}
 
+	if (state == DEAD)
+	{
+		yvel += 1;
+		angle += 10;
+	}
+
 	if (state == STANDING_LEFT || state == RUNNING_LEFT)
 		flip = SDL_FLIP_HORIZONTAL;
 	else
@@ -746,12 +820,16 @@ void SmallOrc::update()
 	box.h = clip[currentClip].h;
 
 	box.x += xvel;
+	box.y += yvel;
+
+	if (ground_tile.y - box.y > box.h+5)
+		falling = true;
 }
 
 void SmallOrc::draw()
 {
 	SDL_Rect destination = { box.x - Camera.x, box.y - Camera.y, box.w, box.h };
-	SDL_RenderCopyEx(renderer, texture, &clip[currentClip], &destination, 0, NULL, flip);
+	SDL_RenderCopyEx(renderer, texture, &clip[currentClip], &destination, angle, NULL, flip);
 }
 
 void SmallOrc::setState(states state)
@@ -762,6 +840,9 @@ void SmallOrc::setState(states state)
 		currentClip = 0;
 	else
 		currentClip = 4;
+
+	if (state == DEAD)
+		yvel = Y_VELOCITY;
 }
 
 int SmallOrc::getState()
@@ -780,6 +861,7 @@ private:
 	SDL_Texture* loadImage(const char *filename);
 	std::vector<SmallOrc> small_orcs;
 	bool cameraCollision(SDL_Rect box);
+	void collisionManager(SmallOrc *orc);
 
 public:
 	void addSmallOrc(int x, int y);
@@ -846,47 +928,14 @@ void EnemyManager::update()
 				orc->setState(orc->RUNNING_LEFT);
 		}
 
-		//Check collision for orc
-		int index = (enemy.y/40)*LevelWidth/40 + (enemy.x/40);
-		if (index >= LevelSize)
-		{
-			orc->collision[orc->LEFT] = false;
-			orc->collision[orc->RIGHT] = false;
-		}
-		else 
-		{
-			if (CurrentLevel[index] == NULL)
-				orc->collision[orc->LEFT] = false;
-			else
-				orc->collision[orc->LEFT] = CurrentLevel[index]->collidable();
-
-			if (CurrentLevel[index+1] == NULL)
-				orc->collision[orc->RIGHT] = false;
-			else
-				orc->collision[orc->RIGHT] = CurrentLevel[index+1]->collidable();
-		}
-
-		//Damage
-		if (checkCollision(player, enemy))
-		{
-			Player.damage(5);
-			if (Player.getYVel() > 0)
-			{
-				Player.setYVel(-1*Player.getYVel());
-			}
-			if (Player.getYVel() == 0)
-			{
-				Player.setYVel(-10);
-			}
-			Player.setXVel(enemy.x < player.x ? 4 : -4);
-
-			orc->setState(orc->RECOVER);
-			
-		}
+		collisionManager(orc);
 
 		//Update
-		if (cameraCollision(orc->getBox()))
+		if (cameraCollision(enemy))
 			orc->update();
+
+		if (orc->getState() == orc->DEAD && !cameraCollision(enemy))
+			small_orcs.erase(small_orcs.begin() + i);
 	}
 }
 
@@ -915,6 +964,83 @@ bool EnemyManager::cameraCollision(SDL_Rect box)
 		return false;
 
 	return true;
+}
+
+void EnemyManager::collisionManager(SmallOrc* orc)
+{
+	SDL_Rect enemy = orc->getBox();
+	SDL_Rect player = Player.getBox();
+
+	//Check collision for orc
+	int index = (enemy.y/40)*LevelWidth/40 + (enemy.x/40);
+	if (index >= LevelSize)
+	{
+		orc->collision[orc->LEFT] = false;
+		orc->collision[orc->RIGHT] = false;
+	}
+	else 
+	{
+		if (CurrentLevel[index] == NULL)
+			orc->collision[orc->LEFT] = false;
+		else
+			orc->collision[orc->LEFT] = CurrentLevel[index]->collidable();
+					
+		if (CurrentLevel[index+1] == NULL)
+			orc->collision[orc->RIGHT] = false;
+		else
+			orc->collision[orc->RIGHT] = CurrentLevel[index+1]->collidable();
+
+		orc->collision[BOTTOM] = false;
+		if (orc->getYVel() < 0)
+			orc->collision[BOTTOM] = false;
+		else
+		{
+			int row = 1;
+			while (index+LevelWidth/40*row+(orc->getXVel()*row)/40 < LevelSize && orc->collision[BOTTOM] == false)
+			{
+				if (CurrentLevel[index+LevelWidth/40*row+(orc->getXVel()*row)/40] != NULL &&
+					CurrentLevel[index+LevelWidth/40*row+(orc->getXVel()*row)/40]->collidable())
+				{
+					orc->ground_tile = CurrentLevel[index+LevelWidth/40*row+(orc->getXVel()*row)/40]->getBox();
+					orc->collision[BOTTOM] = true;
+				}
+				row++;
+			}
+		}
+	}
+		
+	//Damage with player
+	if (checkCollision(player, enemy))
+	{
+		Player.damage(5);
+		if (Player.getYVel() > 0)
+		{
+			Player.setYVel(-1*Player.getYVel());
+		}
+		if (Player.getYVel() == 0)
+		{
+			Player.setYVel(-10);
+		}
+					
+		Player.setXVel(enemy.x < player.x ? 4 : -4);
+
+		orc->setState(orc->RECOVER);
+	}
+
+	//Damage with ninja star
+	SDL_Rect NJbox = Player.getNinjaStarBox();
+	if (checkCollision(enemy, NJbox))
+	{
+		orc->setState(orc->RECOVER);
+		if (enemy.x < NJbox.x)
+			orc->box.x -= 10;
+		else
+			orc->box.x += 10;
+		Player.delNinjaStar();
+		orc->health -= Player.ninjaStarDamage();
+		if (orc->health <= 0)
+			orc->setState(orc->DEAD);
+	}
 }
 #pragma endregion EnemyManager Class
 
@@ -1105,11 +1231,11 @@ void LevelManager::initializeLevels()
 		NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON,
 		NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON,
 		NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON,
-		NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON,
+		NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, SOR, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON,
 		NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NW1, NE2, NW2, NE1, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NW3,
 		NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, SW3, SE4, SW4, SE3, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, SW3,
 		NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NW3, NE4, NW4, NE3, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NW3,
-		MCH, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, SOR, NON, NON, NON, NON, NON, NON, SW3, SE4, SW4, SE3, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, SW3,
+		MCH, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, SOR, NON, NON, NON, NON, NON, NON, SW3, SE4, SW4, SE3, SOR, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, SW3,
 		NW1, NE2, NW2, NE2, NW2, NE2, NW2, NE2, NW2, NE2, NW2, NE2, NW2, NE2, NW2, NE2, NW2, NE2, NW2, NE2, NW5, NE4, NW4, NE5, NW2, NE2, NW2, NE2, NW2, NE2, NW2, NE2, NW2, NE2, NW2, NE2, NW2, NE2, NW2, NE2, NW2, NE2, NW2, NE2, NW2, NE2, NW2, NE2, NW2, NE2, NW2, NE2, NW2, NE2, NW2, NE2, NW2, NE2, NW2, NE2, NW2, NE2, NW2, NE2, NW3 };
 
 	buildLevel(home_level_blueprint, home_level, home_level_height, home_level_width, home_texelw, home_texelh);
