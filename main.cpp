@@ -1,5 +1,6 @@
 #include "SDL.h"
 #include "SDL_image.h"
+#include "SDL_ttf.h"
 #include "Timer.h"
 #include "Tile.h"
 #include <string>
@@ -24,7 +25,9 @@ int frame, start_x, start_y;
 //Camera
 SDL_Rect Camera = { 0, 0, SCREEN_WIDTH, SCREEN_HEIGHT };
 
+//Text
 SDL_Color textColor = {255,255,255};
+TTF_Font *gFont = NULL;
 
 //Read the LazyFoo tutorials to better understand
 SDL_Window* window = NULL;
@@ -86,6 +89,39 @@ bool checkCollision( SDL_Rect a, SDL_Rect b )
     return true;
 }
 
+SDL_Texture* loadText( std::string textureText, int value )
+{
+	SDL_Texture* texture = NULL;
+	std::stringstream stream;
+
+	//Render text surface
+	if (value == -1)
+		stream << textureText;
+	else
+		stream << textureText << value;
+
+	SDL_Surface* textSurface = TTF_RenderText_Solid( gFont, stream.str().c_str(), textColor );
+	if( textSurface == NULL )
+	{
+		printf( "Unable to render text surface! SDL_ttf Error: %s\n", TTF_GetError() );
+	}
+	else
+	{
+		//Create texture from surface pixels
+        texture = SDL_CreateTextureFromSurface( renderer, textSurface );
+		if( texture == NULL )
+		{
+			printf( "Unable to create texture from rendered text! SDL Error: %s\n", SDL_GetError() );
+		}
+
+		//Get rid of old surface
+		SDL_FreeSurface( textSurface );
+	}
+	
+	//Return success
+	return texture;
+}
+
 //Moveable Class and Functions
 #pragma region Moveable
 class Moveable
@@ -136,9 +172,9 @@ int Moveable::getYVel()
 #pragma endregion Moveable Class
 
 
-//Weapon Class and Functions
-#pragma region Weapon
-class Weapon
+//NinjaStar Class and Functions
+#pragma region NinjaStar
+class NinjaStar
 {
 public:
 	void init(SDL_Texture* texture, SDL_Rect box, float xvel, float yvel);
@@ -154,7 +190,7 @@ public:
 	int damage;
 };
 
-void Weapon::init(SDL_Texture* texture, SDL_Rect box, float xvel, float yvel)
+void NinjaStar::init(SDL_Texture* texture, SDL_Rect box, float xvel, float yvel)
 {
 	this->texture = texture;
 	this->box = box;
@@ -163,7 +199,7 @@ void Weapon::init(SDL_Texture* texture, SDL_Rect box, float xvel, float yvel)
 	angle = 0;
 }
 
-void Weapon::update()
+void NinjaStar::update()
 {
 	box.x += xvel;
 	box.y += yvel;
@@ -172,18 +208,18 @@ void Weapon::update()
 		angle = 0;
 }
 
-void Weapon::draw()
+void NinjaStar::draw()
 {
 	SDL_Rect destination = { box.x - Camera.x, box.y - Camera.y, box.w, box.h };
 	SDL_RendererFlip flip = SDL_FLIP_NONE;
 	SDL_RenderCopyEx(renderer, texture, NULL, &destination, angle, NULL, flip);
 }
 
-SDL_Rect Weapon::getBox()
+SDL_Rect NinjaStar::getBox()
 {
 	return box;
 }
-#pragma endregion Weapon Class
+#pragma endregion NinjaStar Class
 
 
 //Character Class and Functions
@@ -221,8 +257,9 @@ private:
 	bool running;
 	bool throwing;
 
-	//Weapon index
-	Weapon ninja_star;
+	//NinjaStar
+	NinjaStar ninja_star;
+	int numNinjaStars;
 
 	//Health
 	int health;
@@ -239,12 +276,13 @@ public:
 	void checkCollision();
 	bool collision[3];
 
+	void addNinjaStars(int amount);
 	SDL_Rect getNinjaStarBox();
 	void delNinjaStar();
 	int ninjaStarDamage();
 
 	//Health
-	void drawHealth();
+	void drawStats();
 	void damage(int amount);
 
 	SDL_Texture* loadImage(const char *filename);
@@ -306,11 +344,12 @@ Character::Character()
 
 	//Health
 	health = 100;
-	SDL_Rect temp = { 10, 40, health*3, 10 };
+	SDL_Rect temp = { 10, 50, health*3, 10 };
 	health_box = temp;
 
 	//Weapons
 	ninja_star.damage = 4;
+	numNinjaStars = 3;
 }
 
 void Character::init(int x, int y)
@@ -431,7 +470,7 @@ void Character::handleInput(SDL_Event event)
 
 	if (event.type == SDL_MOUSEBUTTONDOWN)
 	{
-		if (event.button.button == SDL_BUTTON_LEFT)
+		if (event.button.button == SDL_BUTTON_RIGHT && numNinjaStars > 0)
 		{
 			int target_x, target_y;
 			SDL_GetMouseState(&target_x, &target_y);
@@ -449,6 +488,7 @@ void Character::handleInput(SDL_Event event)
 				throwing = true;
 				ninja_star.init(ninja_star_texture, temp, xvel + delta_x*scale, delta_y*scale);
 				lastThrow = frame;
+				numNinjaStars--;
 			}
 		}
 	}
@@ -618,6 +658,11 @@ void Character::checkCollision()
 	}
 }
 
+void Character::addNinjaStars(int amount)
+{
+	numNinjaStars += amount;
+}
+
 SDL_Rect Character::getNinjaStarBox()
 {
 	return ninja_star.box;
@@ -626,8 +671,8 @@ SDL_Rect Character::getNinjaStarBox()
 void Character::delNinjaStar()
 {
 	ninja_star.texture = NULL;
-	ninja_star.box.x = box.x;
-	ninja_star.box.y = box.y;
+	ninja_star.box.x = Camera.x-100;
+	ninja_star.box.y = Camera.y-100;
 }
 
 int Character::ninjaStarDamage()
@@ -635,8 +680,16 @@ int Character::ninjaStarDamage()
 	return ninja_star.damage;
 }
 
-void Character::drawHealth()
+void Character::drawStats()
 {
+	//NinjaStar
+	SDL_Rect temp = { 10, 10, 30, 30 };
+	SDL_RenderCopy(renderer, ninja_star_texture, NULL, &temp);
+	SDL_Texture* number = loadText("", numNinjaStars);
+	SDL_Rect temp2 = { 35, 35, 15, 15 };
+	SDL_RenderCopy(renderer, number, NULL, &temp2);
+
+	//Health
 	SDL_RenderCopy(renderer, health_bar, NULL, &health_box);
 }
 
@@ -834,6 +887,9 @@ void SmallOrc::draw()
 
 void SmallOrc::setState(states state)
 {
+	if (this->state == DEAD)
+		return;
+
 	this->state = state;
 	beginFrame = frame;
 	if (state == STANDING_LEFT || state == STANDING_RIGHT || state == RECOVER)
@@ -1444,6 +1500,9 @@ bool init()
 {
 	if (SDL_Init( SDL_INIT_EVERYTHING ) == -1)
 		return false;
+	
+	if (TTF_Init() == -1)
+		return false;
 
 	window = SDL_CreateWindow("Ninja Guy: Den",
                           SDL_WINDOWPOS_CENTERED,
@@ -1459,6 +1518,12 @@ bool init()
 	SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "linear");
 	SDL_RenderSetLogicalSize(renderer, 640, 480);
 	SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
+
+	gFont = TTF_OpenFont( "Media/lazy.ttf", 10 );
+	if( gFont == NULL )
+	{
+		printf( "Failed to load lazy font! SDL_ttf Error: %s\n", TTF_GetError() );
+	}
 
 	if (window == NULL)
 		return false;
@@ -1569,7 +1634,7 @@ void draw()
 	EnemyMang.draw();
 
 	//Health is always last
-	Player.drawHealth();
+	Player.drawStats();
 
 	SDL_RenderPresent(renderer);
 }
