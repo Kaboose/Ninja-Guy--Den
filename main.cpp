@@ -6,8 +6,11 @@
 #include <string>
 #include <sstream>
 #include <vector>
+#include <fstream>
 
 using namespace std;
+
+ifstream input_file;
 
 typedef enum { PLAYING, AI_SPEAKING } GAME_STATES;
 GAME_STATES GAME_STATE = PLAYING;
@@ -768,6 +771,8 @@ public:
 	bool collision[3];
 	int health;
 
+	states aggroState;
+
 private:
 	states state;
 	SDL_RendererFlip flip;
@@ -849,7 +854,7 @@ void SmallOrc::update()
 		xvel = 0;
 
 		if (state == RECOVER && (frame-beginFrame+1)%75 == 0)
-			state = STANDING_LEFT;
+			setState(aggroState);
 	}
 
 	if (state == RUNNING_LEFT || state == RUNNING_RIGHT)
@@ -1129,6 +1134,17 @@ void EnemyManager::collisionManager(SmallOrc* orc)
 		Player.setXVel(enemy.x < player.x ? 4 : -4);
 
 		orc->setState(orc->RECOVER);
+
+		if (enemy.x < player.x)
+		{
+			orc->box.x -= 10;
+			orc->aggroState = orc->RUNNING_RIGHT;
+		}
+		else
+		{
+			orc->box.x += 10;
+			orc->aggroState = orc->RUNNING_LEFT;
+		}
 	}
 
 	//Damage with ninja star
@@ -1137,9 +1153,15 @@ void EnemyManager::collisionManager(SmallOrc* orc)
 	{
 		orc->setState(orc->RECOVER);
 		if (enemy.x < NJbox.x)
+		{
 			orc->box.x -= 10;
+			orc->aggroState = orc->RUNNING_RIGHT;
+		}
 		else
+		{
 			orc->box.x += 10;
+			orc->aggroState = orc->RUNNING_LEFT;
+		}
 		Player.delNinjaStar();
 		orc->health -= Player.ninjaStarDamage();
 		if (orc->health <= 0)
@@ -1161,11 +1183,15 @@ private:
 	states state;
 	SDL_Rect box;
 	SDL_Rect clip;
+	std::vector<std::string> script;
+	int currentLine;
 	SDL_Texture* text;
 	SDL_Rect textBox;
+	SDL_Rect leftBox, rightBox, areaBox;
+	SDL_Rect leftClip, rightClip, areaClip;
 
 public:
-	void init(std::string text, int x, int y);
+	void init(int x, int y);
 	void handleInput(SDL_Event event);
 	void update();
 	void draw();
@@ -1173,9 +1199,10 @@ public:
 	void setState(states state);
 
 	SDL_Texture *texture;
+	SDL_Texture *textArea;
 };
 
-void AI::init(std::string text, int x, int y)
+void AI::init(int x, int y)
 {
 	state = STANDING;
 
@@ -1187,19 +1214,57 @@ void AI::init(std::string text, int x, int y)
 	SDL_Rect temp = { 0, 0, 50, 77 };
 	clip = temp;
 
-	SDL_Rect temptext = { box.x+box.w/2, box.y, 100, 80 };
-	textBox = temptext;
-	this->text = loadText(text, -1, scriptFont, &textBox);
+	SDL_Rect leftTemp = { 0, 0, 5, 40 };
+	SDL_Rect rightTemp = { 35, 0, 5, 40 };
+	SDL_Rect areaTemp = { 5, 0, 30, 40 };
+	leftClip = leftTemp;
+	rightClip = rightTemp;
+	areaClip = areaTemp;
+
+	leftBox.w = 5;
+	leftBox.h = 40;
+	rightBox.w = 5;
+	rightBox.h = 40;
+
+	input_file.open("Media/Scripts/start_wizard.txt");
+	if (input_file.is_open())
+	{
+		while (!input_file.eof())
+		{
+			std::string line;
+			getline(input_file, line);
+			script.push_back(line);
+		}
+	}
+
+	currentLine = 0;
 }
 
 void AI::handleInput(SDL_Event event)
 {
 	if (event.type == SDL_KEYDOWN)
 	{
-		if (event.key.keysym.sym == SDLK_e)
+		if (event.key.keysym.sym == SDLK_e && event.key.repeat == 0)
 		{
-			GAME_STATE = PLAYING;
-			state = STANDING;
+			if (currentLine < script.size())
+			{
+				SDL_Rect temptext = { box.x+box.w/2, box.y, 100, 80 };
+				textBox = temptext;
+				text = loadText(script[currentLine], -1, scriptFont, &textBox);
+				SDL_Rect tempArea = { textBox.x - 5, textBox.y - 5, textBox.w + 10, textBox.h + 10 };
+				areaBox = tempArea;
+				SDL_Rect tempLeft = { areaBox.x - 5, areaBox.y, leftBox.w, areaBox.h };
+				SDL_Rect tempRight = {areaBox.x + areaBox.w, areaBox.y, rightBox.w, areaBox.h };
+				leftBox = tempLeft;
+				rightBox = tempRight;
+				currentLine++;
+			}
+			else
+			{
+				setState(STANDING);
+				currentLine = 0;
+				GAME_STATE = PLAYING;
+			}
 		}
 	}
 }
@@ -1208,8 +1273,19 @@ void AI::update()
 {
 	if (checkCollision(Player.getBox(), box) && Player.checkAction())
 	{
-		state = SPEAKING;
+		setState(SPEAKING);
 		GAME_STATE = AI_SPEAKING;
+
+		SDL_Rect temptext = { box.x+box.w/2, box.y, 100, 80 };
+		textBox = temptext;
+		text = loadText(script[currentLine], -1, scriptFont, &textBox);
+		SDL_Rect tempArea = { textBox.x - 5, textBox.y - 5, textBox.w + 10, textBox.h + 10 };
+		areaBox = tempArea;
+		SDL_Rect tempLeft = { areaBox.x - 5, areaBox.y, leftBox.w, areaBox.h };
+		SDL_Rect tempRight = {areaBox.x + areaBox.w, areaBox.y, rightBox.w, areaBox.h };
+		leftBox = tempLeft;
+		rightBox = tempRight;
+		currentLine++;
 	}
 }
 
@@ -1220,6 +1296,14 @@ void AI::draw()
 
 	if (state == SPEAKING)
 	{
+		SDL_Rect tempArea = { areaBox.x - Camera.x, areaBox.y - Camera.y, areaBox.w, areaBox.h };
+		SDL_Rect tempLeft = { leftBox.x - Camera.x, leftBox.y - Camera.y, leftBox.w, leftBox.h };
+		SDL_Rect tempRight = { rightBox.x - Camera.x, rightBox.y - Camera.y, rightBox.w, rightBox.h };
+
+		SDL_RenderCopy(renderer, textArea, &leftClip, &tempLeft);
+		SDL_RenderCopy(renderer, textArea, &areaClip, &tempArea);
+		SDL_RenderCopy(renderer, textArea, &rightClip, &tempRight);
+
 		SDL_Rect temp = { textBox.x - Camera.x, textBox.y - Camera.y, textBox.w, textBox.h };
 		SDL_RenderCopy(renderer, text, NULL, &temp);
 	}
@@ -1568,7 +1652,7 @@ void LevelManager::buildLevel(textures blueprint[], Tile *level_boxes[], int hei
 			break;
 		case WIZ:
 			level = NULL;
-			wizard.init("Welcome to Ninja Guy: Den", (i%width)*tex_width, (i/width)*tex_height);
+			wizard.init((i%width)*tex_width, (i/width)*tex_height);
 		}
 
 		if (level == NULL)
@@ -1715,6 +1799,7 @@ bool loadFiles()
 	Player.init(start_x, start_y);
 
 	wizard.texture = loadImage("Media/wizard.png");
+	wizard.textArea = loadImage("Media/Fonts/textbox.png");
 
 	return true;
 }
