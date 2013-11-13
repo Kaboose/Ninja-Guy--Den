@@ -9,6 +9,9 @@
 
 using namespace std;
 
+typedef enum { PLAYING, AI_SPEAKING } GAME_STATES;
+GAME_STATES GAME_STATE = PLAYING;
+
 typedef enum { SMALL_ORC } enemies_type;
 int num_small_orcs = 0;
 
@@ -28,6 +31,7 @@ SDL_Rect Camera = { 0, 0, SCREEN_WIDTH, SCREEN_HEIGHT };
 //Text
 SDL_Color textColor = {255,255,255};
 TTF_Font *gFont = NULL;
+TTF_Font *scriptFont = NULL;
 
 //Read the LazyFoo tutorials to better understand
 SDL_Window* window = NULL;
@@ -89,7 +93,7 @@ bool checkCollision( SDL_Rect a, SDL_Rect b )
     return true;
 }
 
-SDL_Texture* loadText( std::string textureText, int value )
+SDL_Texture* loadText( std::string textureText, int value, TTF_Font* font, SDL_Rect* box )
 {
 	SDL_Texture* texture = NULL;
 	std::stringstream stream;
@@ -100,7 +104,7 @@ SDL_Texture* loadText( std::string textureText, int value )
 	else
 		stream << textureText << value;
 
-	SDL_Surface* textSurface = TTF_RenderText_Solid( gFont, stream.str().c_str(), textColor );
+	SDL_Surface* textSurface = TTF_RenderText_Solid( font, stream.str().c_str(), textColor );
 	if( textSurface == NULL )
 	{
 		printf( "Unable to render text surface! SDL_ttf Error: %s\n", TTF_GetError() );
@@ -112,6 +116,13 @@ SDL_Texture* loadText( std::string textureText, int value )
 		if( texture == NULL )
 		{
 			printf( "Unable to create texture from rendered text! SDL Error: %s\n", SDL_GetError() );
+		}
+		else
+		{
+			box->w = textSurface->w;
+			box->h = textSurface->h;
+			box->x -= box->w/2;
+			box->y -= box->h;
 		}
 
 		//Get rid of old surface
@@ -245,6 +256,8 @@ private:
 
 	int beginFrame; //Used to know when buttons were pressed to regulate animation properly
 	int lastThrow;
+	int lastA;
+	int lastD;
 
 	//These are for preventing conflicts: walking and jumping, walking two directions, jumping twice, etc
 	bool jumping;
@@ -256,6 +269,7 @@ private:
 	bool stop;
 	bool running;
 	bool throwing;
+	bool actionCheck;
 
 	//NinjaStar
 	NinjaStar ninja_star;
@@ -273,6 +287,8 @@ public:
 	void handleInput(SDL_Event event); //Handles the input
 	void show(int x, int y); //Draws the character on the screen
 
+	bool checkAction();
+	void resetActionCheck();
 	void checkCollision();
 	bool collision[3];
 
@@ -331,6 +347,8 @@ Character::Character()
 
 	beginFrame = 0;
 	lastThrow = 0;
+	lastA = -30;
+	lastD = -30;
 
 	jumping = false;
 	falling = false;
@@ -341,6 +359,7 @@ Character::Character()
 	stop = true;
 	running = false;
 	throwing = false;
+	actionCheck = false;
 
 	//Health
 	health = 100;
@@ -416,6 +435,11 @@ void Character::handleInput(SDL_Event event)
 				beginFrame = frame;
 				walkLeft = true;
 				currentClip = 1;
+
+				//Running
+				if (frame - lastA < 20)
+					running = true;
+				lastA = frame;
 			}
 			break;
 		case SDLK_d:
@@ -426,6 +450,11 @@ void Character::handleInput(SDL_Event event)
 				beginFrame = frame;
 				walkRight = true;
 				currentClip = 9;
+
+				//Running
+				if (frame - lastD < 20)
+					running = true;
+				lastD = frame;
 			}
 			break;
 		case SDLK_w:
@@ -439,8 +468,10 @@ void Character::handleInput(SDL_Event event)
 				beginFrame = frame;
 			}
 			break;
-		case SDLK_RSHIFT:
-			running = true;
+		case SDLK_e:
+			if (event.key.repeat == 0)
+				actionCheck = true;
+			break;
         }
 	}
 	else if( event.type == SDL_KEYUP )
@@ -453,6 +484,7 @@ void Character::handleInput(SDL_Event event)
 					if (!jumping)
 						currentClip = 0;
 					walkLeft = false;
+					running = false;
 				}
 				break;
             case SDLK_d: 
@@ -461,10 +493,9 @@ void Character::handleInput(SDL_Event event)
 					if (!jumping)
 						currentClip = 8;
 					walkRight = false;
+					running = false;
 				}
 				break;
-			case SDLK_RSHIFT:
-				running = false;
         }        
     }
 
@@ -540,7 +571,7 @@ void Character::move()
 		{
 			xvel = -X_VELOCITY;
 			if (running)
-				xvel = -2*X_VELOCITY;
+				xvel = -(X_VELOCITY+2);
 		}
 		else
 			xvel = 0;
@@ -555,7 +586,7 @@ void Character::move()
 		{
 			xvel = X_VELOCITY;
 			if (running)
-				xvel = 2*X_VELOCITY;
+				xvel = X_VELOCITY+2;
 		}
 		else
 			xvel = 0;
@@ -594,6 +625,13 @@ void Character::move()
 		throwing = false;
 		delNinjaStar();
 	}
+
+	//STOP PLAYER
+	if (GAME_STATE != PLAYING)
+	{
+		walkLeft = false;
+		walkRight = false;
+	}
 }
 
 void Character::show(int x, int y)
@@ -605,6 +643,16 @@ void Character::show(int x, int y)
 
 	//LazyFoo** must pass in the renderer, texture, reference to the sprite (as a rectangle), and reference to the destination on the screen
 	SDL_RenderCopy(renderer, texture, &clip[currentClip], &destination);
+}
+
+bool Character::checkAction()
+{
+	return actionCheck;
+}
+
+void Character::resetActionCheck()
+{
+	actionCheck = false;
 }
 
 void Character::checkCollision()
@@ -685,8 +733,8 @@ void Character::drawStats()
 	//NinjaStar
 	SDL_Rect temp = { 10, 10, 30, 30 };
 	SDL_RenderCopy(renderer, ninja_star_texture, NULL, &temp);
-	SDL_Texture* number = loadText("", numNinjaStars);
-	SDL_Rect temp2 = { 35, 35, 15, 15 };
+	SDL_Rect temp2 = { 45, 50, 15, 15 };
+	SDL_Texture* number = loadText("", numNinjaStars, gFont, &temp2);
 	SDL_RenderCopy(renderer, number, NULL, &temp2);
 
 	//Health
@@ -1104,6 +1152,92 @@ void EnemyManager::collisionManager(SmallOrc* orc)
 EnemyManager EnemyMang;
 
 
+//AI Class and Functions
+#pragma region AI
+class AI
+{
+private:
+	typedef enum { STANDING, SPEAKING } states;
+	states state;
+	SDL_Rect box;
+	SDL_Rect clip;
+	SDL_Texture* text;
+	SDL_Rect textBox;
+
+public:
+	void init(std::string text, int x, int y);
+	void handleInput(SDL_Event event);
+	void update();
+	void draw();
+
+	void setState(states state);
+
+	SDL_Texture *texture;
+};
+
+void AI::init(std::string text, int x, int y)
+{
+	state = STANDING;
+
+	box.x = x;
+	box.y = y-37;
+	box.w = 50;
+	box.h = 77;
+
+	SDL_Rect temp = { 0, 0, 50, 77 };
+	clip = temp;
+
+	SDL_Rect temptext = { box.x+box.w/2, box.y, 100, 80 };
+	textBox = temptext;
+	this->text = loadText(text, -1, scriptFont, &textBox);
+}
+
+void AI::handleInput(SDL_Event event)
+{
+	if (event.type == SDL_KEYDOWN)
+	{
+		if (event.key.keysym.sym == SDLK_e)
+		{
+			GAME_STATE = PLAYING;
+			state = STANDING;
+		}
+	}
+}
+
+void AI::update()
+{
+	if (checkCollision(Player.getBox(), box) && Player.checkAction())
+	{
+		state = SPEAKING;
+		GAME_STATE = AI_SPEAKING;
+	}
+}
+
+void AI::draw()
+{
+	SDL_Rect destination = { box.x - Camera.x, box.y - Camera.y, box.w, box.h };
+	SDL_RenderCopy(renderer, texture, &clip, &destination);
+
+	if (state == SPEAKING)
+	{
+		SDL_Rect temp = { textBox.x - Camera.x, textBox.y - Camera.y, textBox.w, textBox.h };
+		SDL_RenderCopy(renderer, text, NULL, &temp);
+	}
+}
+
+void AI::setState(states state)
+{
+	this->state = state;
+}
+#pragma endregion AI Class
+
+//Global AI (to determine control)
+AI* SpeakingAI = NULL;
+
+//Sample wizard
+AI wizard;
+
+
 //Level Manager Class and Functions
 #pragma region LevelManager
 class LevelManager
@@ -1140,7 +1274,8 @@ private:
 		NON, //No texture
 
 		MCH, //Main Character
-		SOR //Small Orc
+		SOR, //Small Orc
+		WIZ //Wizard AI
 	} textures;
 
 	//Home Level
@@ -1291,7 +1426,7 @@ void LevelManager::initializeLevels()
 		NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NW1, NE2, NW2, NE1, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NW3,
 		NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, SW3, SE4, SW4, SE3, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, SW3,
 		NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NW3, NE4, NW4, NE3, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NW3,
-		MCH, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, SOR, NON, NON, NON, NON, NON, NON, SW3, SE4, SW4, SE3, SOR, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, SW3,
+		MCH, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, WIZ, NON, NON, NON, NON, NON, NON, SW3, SE4, SW4, SE3, SOR, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, SW3,
 		NW1, NE2, NW2, NE2, NW2, NE2, NW2, NE2, NW2, NE2, NW2, NE2, NW2, NE2, NW2, NE2, NW2, NE2, NW2, NE2, NW5, NE4, NW4, NE5, NW2, NE2, NW2, NE2, NW2, NE2, NW2, NE2, NW2, NE2, NW2, NE2, NW2, NE2, NW2, NE2, NW2, NE2, NW2, NE2, NW2, NE2, NW2, NE2, NW2, NE2, NW2, NE2, NW2, NE2, NW2, NE2, NW2, NE2, NW2, NE2, NW2, NE2, NW2, NE2, NW3 };
 
 	buildLevel(home_level_blueprint, home_level, home_level_height, home_level_width, home_texelw, home_texelh);
@@ -1431,6 +1566,9 @@ void LevelManager::buildLevel(textures blueprint[], Tile *level_boxes[], int hei
 			level = NULL;
 			EnemyMang.addSmallOrc((i%width)*tex_width, (i/width)*tex_height);
 			break;
+		case WIZ:
+			level = NULL;
+			wizard.init("Welcome to Ninja Guy: Den", (i%width)*tex_width, (i/width)*tex_height);
 		}
 
 		if (level == NULL)
@@ -1519,8 +1657,14 @@ bool init()
 	SDL_RenderSetLogicalSize(renderer, 640, 480);
 	SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
 
-	gFont = TTF_OpenFont( "Media/lazy.ttf", 10 );
+	gFont = TTF_OpenFont( "Media/Fonts/alagard.ttf", 18 );
 	if( gFont == NULL )
+	{
+		printf( "Failed to load alagard font! SDL_ttf Error: %s\n", TTF_GetError() );
+	}
+
+	scriptFont = TTF_OpenFont( "Media/Fonts/romulus.ttf", 18 );
+	if( scriptFont == NULL )
 	{
 		printf( "Failed to load lazy font! SDL_ttf Error: %s\n", TTF_GetError() );
 	}
@@ -1569,6 +1713,8 @@ bool loadFiles()
 
 	Player.load();
 	Player.init(start_x, start_y);
+
+	wizard.texture = loadImage("Media/wizard.png");
 
 	return true;
 }
@@ -1620,7 +1766,12 @@ void update()
 
 	EnemyMang.update();
 
+	wizard.update();
+
 	setCamera(Player.getBox(), LevelMang.getWidth(), LevelMang.getHeight());
+
+	//Reset the player's actionCheck
+	Player.resetActionCheck();
 }
 
 //Draws the screen and any additional things *** MAKE SURE TO PUT ANY DRAWING AFTER THE FIRST TWO LINES
@@ -1630,6 +1781,7 @@ void draw()
 	SDL_RenderCopy(renderer, screen, NULL, NULL);
 
 	LevelMang.draw();
+	wizard.draw();
 	Player.show(Camera.x, Camera.y);
 	EnemyMang.draw();
 
@@ -1642,6 +1794,7 @@ void draw()
 
 int main( int argc, char* args[] )
 {
+	SpeakingAI = &wizard;
 	//Main quit variable
     bool quit = false;
 
@@ -1665,7 +1818,15 @@ int main( int argc, char* args[] )
 		fps.start();
 		while (SDL_PollEvent(&event))
 		{
-			Player.handleInput(event);
+			switch (GAME_STATE)
+			{
+			case PLAYING:
+				Player.handleInput(event);
+				break;
+			case AI_SPEAKING:
+				SpeakingAI->handleInput(event);
+				break;
+			}
 
 			//Quit options
 			if (event.type == SDL_KEYDOWN)
