@@ -36,6 +36,9 @@ SDL_Color textColor = {255,255,255};
 TTF_Font *gFont = NULL;
 TTF_Font *scriptFont = NULL;
 
+//TextBox
+SDL_Texture *textArea = NULL;
+
 //Read the LazyFoo tutorials to better understand
 SDL_Window* window = NULL;
 SDL_Renderer* renderer = NULL; //<-Use to render
@@ -51,6 +54,7 @@ int LevelSize;
 int LevelWidth;
 int LevelHeight;
 
+#pragma region Global Functions
 bool checkCollision( SDL_Rect a, SDL_Rect b )
 {
     //The sides of the rectangles
@@ -96,6 +100,34 @@ bool checkCollision( SDL_Rect a, SDL_Rect b )
     return true;
 }
 
+//Use to load a new image (Pass in the filename as a string. Suggested: Put any media in the media folder and begin any file name with "Media/")
+SDL_Texture* loadImage(const char *filename)
+{
+	//The final texture
+	SDL_Texture* newTexture = NULL;
+
+	//Load image at specified path
+	SDL_Surface* loadedSurface = IMG_Load( filename );
+	if( loadedSurface == NULL )
+	{
+		printf( "Unable to load image %s! SDL_image Error: %s\n", filename, IMG_GetError() );
+	}
+	else
+	{
+		//Create texture from surface pixels
+        newTexture = SDL_CreateTextureFromSurface( renderer, loadedSurface );
+		if( newTexture == NULL )
+		{
+			printf( "Unable to create texture from %s! SDL Error: %s\n", filename, SDL_GetError() );
+		}
+
+		//Get rid of old loaded surface
+		SDL_FreeSurface( loadedSurface );
+	}
+
+	return newTexture;
+}
+
 SDL_Texture* loadText( std::string textureText, int value, TTF_Font* font, SDL_Rect* box )
 {
 	SDL_Texture* texture = NULL;
@@ -135,6 +167,7 @@ SDL_Texture* loadText( std::string textureText, int value, TTF_Font* font, SDL_R
 	//Return success
 	return texture;
 }
+#pragma endregion Global Functions
 
 //Moveable Class and Functions
 #pragma region Moveable
@@ -262,7 +295,7 @@ void Sword::init(SDL_Texture* texture, SDL_Rect box, SDL_RendererFlip flip)
 {
 	this->texture = texture;
 	this->flip = flip;
-	SDL_Rect temp = { box.x+box.w/2, box.y+box.h/2, 40, 10 };
+	SDL_Rect temp = { box.x+box.w/2, box.y+box.h/2, 60, 10 };
 	if (flip == SDL_FLIP_NONE)
 		temp.x -= temp.w;
 	this->box = temp;
@@ -684,7 +717,9 @@ void Character::move()
 				xvel = -(X_VELOCITY+2);
 		}
 		else
+		{
 			xvel = 0;
+		}
 		if ((frame - beginFrame)%4 == 0)
 			currentClip++; //Animate to next clip every 8 frames
 		if (currentClip > 7) //If outside the current direction walking index, loop
@@ -699,7 +734,9 @@ void Character::move()
 				xvel = X_VELOCITY+2;
 		}
 		else
+		{
 			xvel = 0;
+		}
 		if ((frame - beginFrame)%4 == 0)
 			currentClip++;
 		if (currentClip > 15)
@@ -791,10 +828,10 @@ void Character::checkCollision()
 	}
 	else 
 	{
-		if (CurrentLevel[index] == NULL)
+		if (CurrentLevel[index-1] == NULL)
 			collision[LEFT] = false;
-		else
-			collision[LEFT] = CurrentLevel[index]->collidable();
+		else if (box.x <= CurrentLevel[index-1]->getBox().x+CurrentLevel[index-1]->getBox().w + 4)
+			collision[LEFT] = CurrentLevel[index-1]->collidable();
 		
 		if (CurrentLevel[index+1] == NULL)
 			collision[RIGHT] = false;
@@ -809,11 +846,23 @@ void Character::checkCollision()
 			int row = 1;
 			while (index+LevelWidth/40*row+(xvel*row)/40 < LevelSize && collision[BOTTOM] == false)
 			{
-				if (CurrentLevel[index+LevelWidth/40*row+(xvel*row)/40] != NULL &&
-					CurrentLevel[index+LevelWidth/40*row+(xvel*row)/40]->collidable())
+				if (CurrentLevel[index+LevelWidth/40*row+(xvel*row)/40] != NULL)
 				{
-					ground_tile = CurrentLevel[index+LevelWidth/40*row+(xvel*row)/40]->getBox();
-					collision[BOTTOM] = true;
+					SDL_Rect tile = CurrentLevel[index+LevelWidth/40*row+(xvel*row)/40]->getBox();
+					if (box.x < tile.x + tile.w && CurrentLevel[index+LevelWidth/40*row+(xvel*row)/40]->collidable())
+					{
+						ground_tile = tile;
+						collision[BOTTOM] = true;
+					}
+				}
+				else if (CurrentLevel[index +1 +LevelWidth/40*row+(xvel*row)/40] != NULL)
+				{
+					SDL_Rect tile = CurrentLevel[index +1 +LevelWidth/40*row+(xvel*row)/40]->getBox();
+					if (box.x + box.w > tile.x && CurrentLevel[index +1 +LevelWidth/40*row+(xvel*row)/40]->collidable())
+					{
+						ground_tile = tile;
+						collision[BOTTOM] = true;
+					}
 				}
 				row++;
 			}
@@ -1344,7 +1393,6 @@ public:
 	void setState(states state);
 
 	SDL_Texture *texture;
-	SDL_Texture *textArea;
 };
 
 void AI::init(int x, int y)
@@ -1409,7 +1457,6 @@ void AI::handleInput(SDL_Event event)
 				setState(STANDING);
 				currentLine = 0;
 				GAME_STATE = PLAYING;
-				Player.addNinjaStars(4);
 			}
 		}
 	}
@@ -1468,6 +1515,99 @@ AI* SpeakingAI = NULL;
 AI wizard;
 
 
+//Treasure Chest Class and Functions
+#pragma region TreasureChest
+class TreasureChest
+{
+private:
+	typedef enum { OPEN, CLOSED } states;
+	states state;
+
+	SDL_Texture* open_texture;
+	SDL_Texture* closed_texture;
+	SDL_Texture* text_texture;
+
+	SDL_Rect box;
+
+	std::string text;
+
+	SDL_Rect textBox;
+	SDL_Rect leftBox, rightBox, areaBox;
+	SDL_Rect leftClip, rightClip, areaClip;
+
+	int opened;
+
+public:
+	void init(int x, int y, std::string text);
+	SDL_Rect getBox();
+	void setState(states state);
+	void setTextures(SDL_Texture* open, SDL_Texture* closed);
+	void update();
+	void draw();
+};
+
+void TreasureChest::init(int x, int y, std::string text)
+{
+	SDL_Rect temp = { x, y, 40, 40 };
+	box = temp;
+
+	this->text = text;
+
+	setState(CLOSED);
+
+	SDL_Rect temptext = { box.x+box.w/2, box.y, 100, 80 };
+	textBox = temptext;
+	text_texture = loadText(text, -1, scriptFont, &textBox);
+
+	opened = -200;
+}
+
+SDL_Rect TreasureChest::getBox()
+{
+	return box;
+}
+
+void TreasureChest::setState(states state)
+{
+	this->state = state;
+	if (state == OPEN)
+		opened = frame;
+}
+
+void TreasureChest::setTextures(SDL_Texture* open, SDL_Texture* closed)
+{
+	open_texture = open;
+	closed_texture = closed;
+}
+
+void TreasureChest::update()
+{
+	if (checkCollision(Player.getBox(), box) && Player.checkAction() && state == CLOSED)
+	{
+		setState(OPEN);
+		Player.addNinjaStars(5);
+	}
+}
+
+void TreasureChest::draw()
+{
+	SDL_Rect destination = { box.x - Camera.x, box.y - Camera.y, box.w, box.h };
+	SDL_Rect text_destination = { textBox.x - Camera.x, textBox.y - Camera.y, textBox.w, textBox.h };
+
+	if (state == OPEN)
+		SDL_RenderCopy(renderer, open_texture, NULL, &destination);
+	else
+		SDL_RenderCopy(renderer, closed_texture, NULL, &destination);
+
+	if (frame - opened < 120)
+		SDL_RenderCopy(renderer, text_texture, NULL, &text_destination);
+}
+#pragma endregion TreasureChest Class
+
+//Sample chest
+TreasureChest chest;
+
+
 //Level Manager Class and Functions
 #pragma region LevelManager
 class LevelManager
@@ -1505,7 +1645,8 @@ private:
 
 		MCH, //Main Character
 		SOR, //Small Orc
-		WIZ //Wizard AI
+		WIZ, //Wizard AI
+		TC1 //Treasure Chests
 	} textures;
 
 	//Home Level
@@ -1656,7 +1797,7 @@ void LevelManager::initializeLevels()
 		NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NW1, NE2, NW2, NE1, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NW3,
 		NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, SW3, SE4, SW4, SE3, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, SW3,
 		NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NW3, NE4, NW4, NE3, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NW3,
-		MCH, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, WIZ, NON, NON, NON, NON, NON, NON, SW3, SE4, SW4, SE3, SOR, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, SW3,
+		MCH, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, WIZ, NON, NON, NON, NON, NON, TC1, SW3, SE4, SW4, SE3, SOR, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, SW3,
 		NW1, NE2, NW2, NE2, NW2, NE2, NW2, NE2, NW2, NE2, NW2, NE2, NW2, NE2, NW2, NE2, NW2, NE2, NW2, NE2, NW5, NE4, NW4, NE5, NW2, NE2, NW2, NE2, NW2, NE2, NW2, NE2, NW2, NE2, NW2, NE2, NW2, NE2, NW2, NE2, NW2, NE2, NW2, NE2, NW2, NE2, NW2, NE2, NW2, NE2, NW2, NE2, NW2, NE2, NW2, NE2, NW2, NE2, NW2, NE2, NW2, NE2, NW2, NE2, NW3 };
 
 	buildLevel(home_level_blueprint, home_level, home_level_height, home_level_width, home_texelw, home_texelh);
@@ -1799,6 +1940,11 @@ void LevelManager::buildLevel(textures blueprint[], Tile *level_boxes[], int hei
 		case WIZ:
 			level = NULL;
 			wizard.init((i%width)*tex_width, (i/width)*tex_height);
+			break;
+		case TC1:
+			level = NULL;
+			chest.init((i%width)*tex_width, (i/width)*tex_height, "You found some ninja stars!");
+			break;
 		}
 
 		if (level == NULL)
@@ -1905,34 +2051,6 @@ bool init()
 	return true;
 }
 
-//Use to load a new image (Pass in the filename as a string. Suggested: Put any media in the media folder and begin any file name with "Media/")
-SDL_Texture* loadImage(const char *filename)
-{
-	//The final texture
-	SDL_Texture* newTexture = NULL;
-
-	//Load image at specified path
-	SDL_Surface* loadedSurface = IMG_Load( filename );
-	if( loadedSurface == NULL )
-	{
-		printf( "Unable to load image %s! SDL_image Error: %s\n", filename, IMG_GetError() );
-	}
-	else
-	{
-		//Create texture from surface pixels
-        newTexture = SDL_CreateTextureFromSurface( renderer, loadedSurface );
-		if( newTexture == NULL )
-		{
-			printf( "Unable to create texture from %s! SDL Error: %s\n", filename, SDL_GetError() );
-		}
-
-		//Get rid of old loaded surface
-		SDL_FreeSurface( loadedSurface );
-	}
-
-	return newTexture;
-}
-
 //Loads all the files
 bool loadFiles()
 {
@@ -1945,7 +2063,9 @@ bool loadFiles()
 	Player.init(start_x, start_y);
 
 	wizard.texture = loadImage("Media/wizard.png");
-	wizard.textArea = loadImage("Media/Fonts/textbox.png");
+	textArea = loadImage("Media/Fonts/textbox.png");
+
+	chest.setTextures(loadImage("Media/treasure_open.png"), loadImage("Media/treasure_closed.png"));
 
 	return true;
 }
@@ -1997,7 +2117,9 @@ void update()
 
 	EnemyMang.update();
 
+	//******GOING TO BE CHANGED*******
 	wizard.update();
+	chest.update();
 
 	setCamera(Player.getBox(), LevelMang.getWidth(), LevelMang.getHeight());
 
@@ -2013,6 +2135,7 @@ void draw()
 
 	LevelMang.draw();
 	wizard.draw();
+	chest.draw();
 	Player.show(Camera.x, Camera.y);
 	EnemyMang.draw();
 

@@ -1,7 +1,15 @@
 Welcome, Den, to the world of ninjas!
 Today is the start of an exciting journey.
-To start, why don't you try throwing a ninja star
-at that orc using the right mouse button!
-Here, I'll give you a few to try out!
-By the way, you also have a sword.
-To weild it, use the left mouse button!
+You have been chosen to weild the mighty
+sword of Denver. Hold it close, as it
+may be the only tangible piece of this
+world that you can trust.
+To use the sword, use the left mouse button.
+There may be some battles in which you
+need range, however. I've heard that you
+are quite the expert with shuriken. I believe
+I saw some in that treasure chest over there!
+Why don't you go collect them and try
+them out on that orc there?
+To use your ninja stars, use the right
+mouse button!
