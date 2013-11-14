@@ -1,4 +1,7 @@
 Welcome, Den, to the world of ninjas!
 Today is the start of an exciting journey.
-To start, why don't you try throwing a ninja star...
-...at that orc using the right mouse button!
+To start, why don't you try throwing a ninja star
+at that orc using the right mouse button!
+Here, I'll give you a few to try out!
+By the way, you also have a sword.
+To weild it, use the left mouse button!
