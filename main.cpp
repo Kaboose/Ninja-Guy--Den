@@ -283,6 +283,11 @@ public:
 	SDL_Texture* texture;
 	SDL_Rect box;
 	int angle;
+	int start;
+
+	int leftAngles[3];
+	int rightAngles[3];
+	int index;
 
 	int damage;
 
@@ -293,6 +298,7 @@ public:
 
 void Sword::init(SDL_Texture* texture, SDL_Rect box, SDL_RendererFlip flip)
 {
+	start = frame;
 	this->texture = texture;
 	this->flip = flip;
 	SDL_Rect temp = { box.x+box.w/2, box.y+box.h/2, 60, 10 };
@@ -300,20 +306,37 @@ void Sword::init(SDL_Texture* texture, SDL_Rect box, SDL_RendererFlip flip)
 		temp.x -= temp.w;
 	this->box = temp;
 
+	index = 0;
+	leftAngles[0] = -300;
+	leftAngles[1] = -360;
+	leftAngles[2] = leftAngles[0];
+
+	rightAngles[0] = -60;
+	rightAngles[1] = 0;
+	rightAngles[2] = rightAngles[0];
+
 	if (flip == RIGHT)
-		angle = -70;
+		angle = rightAngles[index];
 	else
-		angle = 70;
+		angle = leftAngles[index];
 
 	done = false;
 }
 
 void Sword::update(SDL_Rect player, SDL_RendererFlip flip)
 {
+	if ((frame+1 - start) % 20 == 0)
+	{
+		if (index < 2)
+			index++;
+		else
+			done = true;
+	}
+
 	if (flip == RIGHT)
-		angle += 15;
+		angle = rightAngles[index];
 	else
-		angle -= 15;
+		angle = leftAngles[index];
 
 	box.x = player.x + player.w/2;
 	box.y = player.y + player.h/2;
@@ -321,9 +344,6 @@ void Sword::update(SDL_Rect player, SDL_RendererFlip flip)
 		box.x -= box.w;
 
 	this->flip = flip;
-
-	if (angle > 71 || angle < -71)
-		done = true;
 }
 
 void Sword::draw()
@@ -331,7 +351,7 @@ void Sword::draw()
 	SDL_Rect destination = { box.x - Camera.x, box.y - Camera.y, box.w, box.h };
 
 	SDL_Point center = {0, destination.h/2};
-	if (flip == SDL_FLIP_NONE)
+	if (flip == LEFT)
 	{
 		center.x = destination.w;
 	}
@@ -664,6 +684,10 @@ void Character::handleInput(SDL_Event event)
 			sword.init(sword_texture, box, flip);
 			swinging = true;
 			lastSwing = frame;
+
+			walkable = false;
+			walkLeft = false;
+			walkRight = false;
 		}
 	}
 }
@@ -784,7 +808,10 @@ void Character::move()
 	if (sword.done)
 		delSword();
 	if (frame+1 - lastSwing > 70)
+	{
 		swinging = false;
+		walkable = true;
+	}
 
 	//STOP PLAYER
 	if (GAME_STATE != PLAYING)
@@ -799,13 +826,13 @@ void Character::show(int x, int y)
 	if (ninja_star.texture != NULL)
 		ninja_star.draw();
 
-	if (swinging)
-		sword.draw();
-
 	SDL_Rect destination = { box.x - x, box.y - y, box.w, box.h };
 
 	//LazyFoo** must pass in the renderer, texture, reference to the sprite (as a rectangle), and reference to the destination on the screen
 	SDL_RenderCopy(renderer, texture, &clip[currentClip], &destination);
+
+	if (swinging)
+		sword.draw();
 }
 
 bool Character::checkAction()
@@ -821,19 +848,19 @@ void Character::resetActionCheck()
 void Character::checkCollision()
 {
 	int index = (box.y/40)*LevelWidth/40 + (box.x/40);
-	if (index >= LevelSize)
+	if (index >= LevelSize || index <= 0)
 	{
 		collision[LEFT] = false;
 		collision[RIGHT] = false;
 	}
 	else 
 	{
-		if (CurrentLevel[index-1] == NULL)
+		if (CurrentLevel[index-1] == NULL || (index*40)%LevelWidth == 0)
 			collision[LEFT] = false;
 		else if (box.x <= CurrentLevel[index-1]->getBox().x+CurrentLevel[index-1]->getBox().w + 4)
 			collision[LEFT] = CurrentLevel[index-1]->collidable();
 		
-		if (CurrentLevel[index+1] == NULL)
+		if (CurrentLevel[index+1] == NULL || index%(LevelWidth/40) == LevelWidth/40 - 1)
 			collision[RIGHT] = false;
 		else
 			collision[RIGHT] = CurrentLevel[index+1]->collidable();
@@ -1266,6 +1293,9 @@ bool EnemyManager::cameraCollision(SDL_Rect box)
 
 void EnemyManager::collisionManager(SmallOrc* orc)
 {
+	if (orc->getState() == orc->DEAD)
+		return;
+
 	SDL_Rect enemy = orc->getBox();
 	SDL_Rect player = Player.getBox();
 
@@ -1342,7 +1372,7 @@ void EnemyManager::collisionManager(SmallOrc* orc)
 	bool star = checkCollision(enemy, NJbox);
 	bool sword = checkCollision(enemy, swordBox);
 
-	if ( star || sword )
+	if ( (star || sword) && orc->getState() != orc->RECOVER)
 	{
 		orc->setState(orc->RECOVER);
 		if ((star && enemy.x < NJbox.x) || (sword && enemy.x < swordBox.x))
@@ -1519,8 +1549,19 @@ AI wizard;
 #pragma region TreasureChest
 class TreasureChest
 {
-private:
+public:
+	typedef enum { NINJA_STARS } types;
 	typedef enum { OPEN, CLOSED } states;
+
+	TreasureChest();
+	TreasureChest(int x, int y, types type, std::string text, SDL_Texture* open, SDL_Texture* closed);
+	SDL_Rect getBox();
+	void setState(states state);
+	void update();
+	void draw();
+
+private:
+	types type;
 	states state;
 
 	SDL_Texture* open_texture;
@@ -1536,22 +1577,17 @@ private:
 	SDL_Rect leftClip, rightClip, areaClip;
 
 	int opened;
-
-public:
-	void init(int x, int y, std::string text);
-	SDL_Rect getBox();
-	void setState(states state);
-	void setTextures(SDL_Texture* open, SDL_Texture* closed);
-	void update();
-	void draw();
 };
 
-void TreasureChest::init(int x, int y, std::string text)
+TreasureChest::TreasureChest(int x, int y, types type, std::string text, SDL_Texture* open, SDL_Texture* closed)
 {
 	SDL_Rect temp = { x, y, 40, 40 };
 	box = temp;
 
+	this->type = type;
 	this->text = text;
+	open_texture = open;
+	closed_texture = closed;
 
 	setState(CLOSED);
 
@@ -1571,13 +1607,15 @@ void TreasureChest::setState(states state)
 {
 	this->state = state;
 	if (state == OPEN)
+	{
 		opened = frame;
-}
-
-void TreasureChest::setTextures(SDL_Texture* open, SDL_Texture* closed)
-{
-	open_texture = open;
-	closed_texture = closed;
+		switch (type)
+		{
+		case NINJA_STARS:
+			Player.addNinjaStars(5);
+			break;
+		}
+	}
 }
 
 void TreasureChest::update()
@@ -1585,7 +1623,6 @@ void TreasureChest::update()
 	if (checkCollision(Player.getBox(), box) && Player.checkAction() && state == CLOSED)
 	{
 		setState(OPEN);
-		Player.addNinjaStars(5);
 	}
 }
 
@@ -1604,8 +1641,63 @@ void TreasureChest::draw()
 }
 #pragma endregion TreasureChest Class
 
-//Sample chest
-TreasureChest chest;
+//Treasure Chest Manager Class and Functions
+#pragma region TreasureChestManager
+class TreasureChestManager
+{
+private:
+	std::vector<TreasureChest> treasure_chests;
+	SDL_Texture* open;
+	SDL_Texture* closed;
+
+public:
+	void load();
+	void addChest(int x, int y, int type);
+	void update();
+	void draw();
+};
+
+void TreasureChestManager::load()
+{
+	open = loadImage("Media/treasure_open.png");
+	closed = loadImage("Media/treasure_closed.png");
+}
+
+void TreasureChestManager::addChest(int x, int y, int type)
+{
+	TreasureChest::types TYPE;
+	std::string STRING;
+	switch (type)
+	{
+	case 1:
+		TYPE = TreasureChest::NINJA_STARS;
+		STRING = "You found some ninja stars!";
+		break;
+	}
+
+	treasure_chests.push_back(TreasureChest(x, y, TYPE, STRING, open, closed));
+}
+
+void TreasureChestManager::update()
+{
+	for (int i = 0; i < treasure_chests.size(); i++)
+	{
+		if (checkCollision(Camera, treasure_chests.at(i).getBox()))
+			treasure_chests.at(i).update();
+	}
+}
+
+void TreasureChestManager::draw()
+{
+	for (int i = 0; i < treasure_chests.size(); i++)
+	{
+		if (checkCollision(Camera, treasure_chests.at(i).getBox()))
+			treasure_chests.at(i).draw();
+	}
+}
+#pragma endregion TreasureChestManager Class
+
+TreasureChestManager TreasureChestMang;
 
 
 //Level Manager Class and Functions
@@ -1943,7 +2035,7 @@ void LevelManager::buildLevel(textures blueprint[], Tile *level_boxes[], int hei
 			break;
 		case TC1:
 			level = NULL;
-			chest.init((i%width)*tex_width, (i/width)*tex_height, "You found some ninja stars!");
+			TreasureChestMang.addChest((i%width)*tex_width, (i/width)*tex_height, 1);
 			break;
 		}
 
@@ -2055,6 +2147,7 @@ bool init()
 bool loadFiles()
 {
 	EnemyMang.load();
+	TreasureChestMang.load();
 
 	LevelMang.loadTextures();
 	LevelMang.initializeLevels();
@@ -2064,8 +2157,6 @@ bool loadFiles()
 
 	wizard.texture = loadImage("Media/wizard.png");
 	textArea = loadImage("Media/Fonts/textbox.png");
-
-	chest.setTextures(loadImage("Media/treasure_open.png"), loadImage("Media/treasure_closed.png"));
 
 	return true;
 }
@@ -2117,9 +2208,10 @@ void update()
 
 	EnemyMang.update();
 
+	TreasureChestMang.update();
+
 	//******GOING TO BE CHANGED*******
 	wizard.update();
-	chest.update();
 
 	setCamera(Player.getBox(), LevelMang.getWidth(), LevelMang.getHeight());
 
@@ -2135,7 +2227,7 @@ void draw()
 
 	LevelMang.draw();
 	wizard.draw();
-	chest.draw();
+	TreasureChestMang.draw();
 	Player.show(Camera.x, Camera.y);
 	EnemyMang.draw();
 
