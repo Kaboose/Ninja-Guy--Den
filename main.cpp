@@ -1781,12 +1781,28 @@ TreasureChestManager TreasureChestMang;
 class LevelManager
 {
 public:
-	typedef enum { HOME_LEVEL } level_type;
+	typedef enum { HOME_LEVEL, LEVEL_ONE } level_type;
+
+	typedef enum { NE1, NW1, SE1, SW1, NE2, NW2, SE2, SW2, NE3, NW3, SE3, SW3, NE4, NW4, SE4, SW4, NE5, NW5, SE5, SW5, //Walls
+		WE1, WW1, WE2, WW2, //Walkways
+		TN1, TS1, TN2, TS2, //Totems
+		CES, FBG, FLA, GRA, NBG, ROT, //Cat's Eyes, Far Background, Flare, Grass, Nearbackground, Roots
+		NON, //No texture
+
+		MCH, //Main Character
+		SOR, //Small Orc
+		WIZ, //Wizard AI
+		TC1 //Treasure Chests
+	} textures;
+
 	void loadTextures();
 	SDL_Texture* loadImage(const char *filename);
 	void initializeLevels();
 	void loadLevel(level_type level);
 	void draw();
+
+	void loadLevelFromText(std::string filename, level_type level);
+	textures stringToEnum(std::string enumString);
 
 	int getWidth();
 	int getHeight();
@@ -1805,18 +1821,6 @@ private:
 	int current_height;
 	int current_width;
 
-	typedef enum { NE1, NW1, SE1, SW1, NE2, NW2, SE2, SW2, NE3, NW3, SE3, SW3, NE4, NW4, SE4, SW4, NE5, NW5, SE5, SW5, //Walls
-		WE1, WW1, WE2, WW2, //Walkways
-		TN1, TS1, TN2, TS2, //Totems
-		CES, FBG, FLA, GRA, NBG, ROT, //Cat's Eyes, Far Background, Flare, Grass, Nearbackground, Roots
-		NON, //No texture
-
-		MCH, //Main Character
-		SOR, //Small Orc
-		WIZ, //Wizard AI
-		TC1 //Treasure Chests
-	} textures;
-
 	//Home Level
 	int home_texelw;
 	int home_texelh;
@@ -1827,6 +1831,18 @@ private:
 	SDL_Texture *home_level_textures[780];
 	SDL_Rect *background;
 	Tile *home_level[780];
+	textures home_level_blueprint[780];
+
+	//Level One
+	int levelone_texelw;
+	int levelone_texelh;
+	int levelone_level_width;
+	int levelone_level_height;
+	int levelone_level_size;
+	SDL_Texture *levelone_level_background[2];
+	SDL_Texture *levelone_level_textures[3540];
+	Tile *levelone_level[3540];
+	textures levelone_level_blueprint[3540];
 
 #pragma region Textures
 	//Textures
@@ -1947,29 +1963,31 @@ void LevelManager::initializeLevels()
 	//Home level
 	home_texelw = 40;
 	home_texelh = 40;
-
 	home_level_width = 65;
 	home_level_height = 12;
 	home_level_size = home_level_width*home_level_height;
-
 	home_level_background[0] = far_background;
 	home_level_background[1] = NULL;
-	textures home_level_blueprint[780] = {
-		NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON,
-        NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON,
-		NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON,
-		NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON,
-		NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON,
-		NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON,
-		NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, SOR, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON,
-		NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NW1, NE2, NW2, NE1, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NW3,
-		NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, SW3, SE4, SW4, SE3, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, SW3,
-		NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NW3, NE4, NW4, NE3, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NW3,
-		MCH, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, WIZ, NON, NON, NON, NON, NON, TC1, SW3, SE4, SW4, SE3, SOR, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, NON, SW3,
-		NW1, NE2, NW2, NE2, NW2, NE2, NW2, NE2, NW2, NE2, NW2, NE2, NW2, NE2, NW2, NE2, NW2, NE2, NW2, NE2, NW5, NE4, NW4, NE5, NW2, NE2, NW2, NE2, NW2, NE2, NW2, NE2, NW2, NE2, NW2, NE2, NW2, NE2, NW2, NE2, NW2, NE2, NW2, NE2, NW2, NE2, NW2, NE2, NW2, NE2, NW2, NE2, NW2, NE2, NW2, NE2, NW2, NE2, NW2, NE2, NW2, NE2, NW2, NE2, NW3 };
+	loadLevelFromText("levelhome.txt", HOME_LEVEL);
 
-	buildLevel(home_level_blueprint, home_level, home_level_height, home_level_width, home_texelw, home_texelh);
+	//level one
+	levelone_texelw = 40;
+	levelone_texelh = 40;
+	levelone_level_width = 295;
+	levelone_level_height = 12;
+	levelone_level_size = home_level_width*home_level_height;
+	levelone_level_background[0] = far_background;
+	levelone_level_background[1] = NULL;
+	loadLevelFromText("levelone.txt", LEVEL_ONE);
+	
+	// DEBUG: setting current level equal to a specific level to ensure it initializes correctly - needs to be corrected
+	current_level = LEVEL_ONE;
 
+	if (current_level == HOME_LEVEL)
+		buildLevel(home_level_blueprint, home_level, home_level_height, home_level_width, home_texelw, home_texelh);
+	
+	else if (current_level == LEVEL_ONE)
+		buildLevel(levelone_level_blueprint, levelone_level, levelone_level_height, levelone_level_width, levelone_texelw, levelone_texelh);
 }
 
 void LevelManager::loadLevel(level_type level)
@@ -1983,7 +2001,14 @@ void LevelManager::loadLevel(level_type level)
 		texel_width = home_texelw;
 		texel_height = home_texelh;
 		break;
+	case LEVEL_ONE:
+		current_width = levelone_level_width;
+		current_height = levelone_level_height;
+		texel_width = levelone_texelw;
+		texel_height = levelone_texelh;
+		break;
 	}
+
 }
 
 void LevelManager::buildLevel(textures blueprint[], Tile *level_boxes[], int height, int width, int tex_width, int tex_height)
@@ -2139,6 +2164,23 @@ void LevelManager::draw()
 			home_level[i]->draw(Camera, renderer);
 		}
 	}
+
+	else if (current_level == LEVEL_ONE)
+	{
+		for (int i = 0; i < 2; i++)
+		{
+			if (levelone_level_background[i] == NULL)
+				continue;
+			SDL_RenderCopy(renderer, levelone_level_background[i], NULL, background);
+		}
+		for (int i = 0; i < levelone_level_width*levelone_level_height; i++)
+		{
+			if (levelone_level[i] == NULL)
+				continue;
+			levelone_level[i]->draw(Camera, renderer);
+		}
+	}
+
 }
 
 int LevelManager::getWidth()
@@ -2158,8 +2200,10 @@ int LevelManager::getSize()
 
 SDL_Rect LevelManager::getBoxes(int i)
 {
-	if (home_level[i] != NULL)
+	if (current_level == HOME_LEVEL && home_level[i] != NULL)
 		return home_level[i]->getBox();
+	else if (current_level == LEVEL_ONE && levelone_level[i] != NULL)
+		return levelone_level[i]->getBox();
 	SDL_Rect temp =  { 0, 0, 0, 0 };
 	return temp;
 }
@@ -2168,8 +2212,112 @@ Tile** LevelManager::getLevel()
 {
 	if (current_level == HOME_LEVEL)
 		return home_level;
+	else if (current_level == LEVEL_ONE)
+		return levelone_level;
 	return NULL;
 }
+
+void LevelManager::loadLevelFromText(std::string filename, level_type level)
+{
+	char tempchar;
+	std::string tempEnum = "";
+	int numberOfTiles = 0;
+	ifstream ifile(filename.c_str());
+	textures newText;
+
+	while (!ifile.eof()){
+		tempchar = ifile.get();
+		if (tempchar > 44 && tempchar < 123)
+			tempEnum += tempchar;
+		
+		else{
+			if (level == HOME_LEVEL)
+				home_level_blueprint[numberOfTiles] = stringToEnum(tempEnum);
+			else if (level == LEVEL_ONE)
+				levelone_level_blueprint[numberOfTiles] = stringToEnum(tempEnum);
+			tempEnum = "";
+			numberOfTiles++;
+			ifile.get();
+		}
+	}
+	
+}
+
+LevelManager::textures LevelManager::stringToEnum(std::string enumString){
+	if (enumString == "NE1")
+		return NE1;
+	else if (enumString == "NW1")
+		return NW1;
+	else if (enumString == "SE1")
+		return SE1;
+	else if (enumString == "SW1")
+		return SW1;
+	else if (enumString == "NE2")
+		return NE2;
+	else if (enumString == "NW2")
+		return NW2;
+	else if (enumString == "SE2")
+		return SE2;
+	else if (enumString == "SW2")
+		return SW2;
+	else if (enumString == "NE3")
+		return NE3;
+	else if (enumString == "NW3")
+		return NW3;
+	else if (enumString == "SE3")
+		return SE3;
+	else if (enumString == "SW3")
+		return SW3;
+	else if (enumString == "NE4")
+		return NE4;
+	else if (enumString == "NW4")
+		return NW4;
+	else if (enumString == "SE4")
+		return SE4;
+	else if (enumString == "SW4")
+		return SW4;
+	else if (enumString == "NE5")
+		return NE5;
+	else if (enumString == "NW5")
+		return NW5;
+	else if (enumString == "SE5")
+		return SE5;
+	else if (enumString == "SW5")
+		return SW5;
+	else if (enumString == "WE1")
+		return WE1;
+	else if (enumString == "WW1")
+		return WW1;
+	else if (enumString == "WE2")
+		return WE2;
+	else if (enumString == "WW2")
+		return WW2;
+	else if (enumString == "TN1")
+		return TN1;
+	else if (enumString == "TS1")
+		return TS1;
+	else if (enumString == "TN2")
+		return TN2;
+	else if (enumString == "TS2")
+		return TS2;
+	else if (enumString == "GRA")
+		return GRA;
+	else if (enumString == "ROT")
+		return ROT;
+	else if (enumString == "NON")
+		return NON;
+	else if (enumString == "MCH")
+		return MCH;
+	else if (enumString == "SOR")
+		return SOR;
+	else if (enumString == "WIZ")
+		return WIZ;
+	else if (enumString == "TC1")
+		return TC1;
+	else
+		return NON;
+}
+
 #pragma endregion LevelManager Class
 
 //Level Manager
@@ -2330,7 +2478,7 @@ int main( int argc, char* args[] )
 		return 1;
 
 	//Initialize to home level
-	LevelMang.loadLevel(LevelMang.HOME_LEVEL);
+	LevelMang.loadLevel(LevelMang.LEVEL_ONE);
 
 	//Main game loop
 	while (!quit)
