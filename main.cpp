@@ -47,6 +47,7 @@ Timer fps;
 
 //Current Level
 Tile** CurrentLevel;
+SDL_Texture** Background;
 int LevelSize;
 int LevelWidth;
 int LevelHeight;
@@ -166,56 +167,11 @@ SDL_Texture* loadText( std::string textureText, int value, TTF_Font* font, SDL_R
 }
 #pragma endregion Global Functions
 
-//Moveable Class and Functions
-#pragma region Moveable
-class Moveable
-{
-public:
-	int X_VELOCITY;
-	int Y_VELOCITY;
-	int MAX_Y_VELOCITY;
-
-	int xvel;
-	float yvel;
-
-	SDL_Rect box;
-
-	SDL_Rect getBox(); //Gets the character's current location
-	void setXVel(int x);
-	void setYVel(int y);
-	int getXVel();
-	int getYVel();
-
-	SDL_Rect ground_tile;
-};
-
-SDL_Rect Moveable::getBox()
-{
-	return box;
-}
-
-void Moveable::setXVel(int x)
-{
-	xvel = x;
-}
-
-void Moveable::setYVel(int y)
-{
-	yvel = y;
-}
-
-int Moveable::getXVel()
-{
-	return xvel;
-}
-
-int Moveable::getYVel()
-{
-	return yvel;
-}
-#pragma endregion Moveable Class
 
 
+//******************************************** WEAPONS ************************************************
+
+#pragma region Weapons
 //NinjaStar Class and Functions
 #pragma region NinjaStar
 class NinjaStar
@@ -322,7 +278,7 @@ void Sword::init(SDL_Texture* texture, SDL_Rect box, SDL_RendererFlip flip)
 
 void Sword::update(SDL_Rect player, SDL_RendererFlip flip)
 {
-	if ((frame+1 - start) % 20 == 0)
+	if ((frame+1 - start) % 10 == 0)
 	{
 		if (index < 2)
 			index++;
@@ -361,6 +317,64 @@ SDL_Rect Sword::getBox()
 	return box;
 }
 #pragma endregion Sword Class
+#pragma endregion Weapons
+
+//******************************************* END WEAPONS *****************************************
+
+
+
+
+//******************************** MOVEABLE WITH SUBCLASSES AND MANAGER ********************************
+
+#pragma region Moveables
+//Moveable Class and Functions
+#pragma region Moveable
+class Moveable
+{
+public:
+	int X_VELOCITY;
+	int Y_VELOCITY;
+	int MAX_Y_VELOCITY;
+
+	int xvel;
+	float yvel;
+
+	SDL_Rect box;
+
+	SDL_Rect getBox(); //Gets the character's current location
+	void setXVel(int x);
+	void setYVel(int y);
+	int getXVel();
+	int getYVel();
+
+	SDL_Rect ground_tile;
+};
+
+SDL_Rect Moveable::getBox()
+{
+	return box;
+}
+
+void Moveable::setXVel(int x)
+{
+	xvel = x;
+}
+
+void Moveable::setYVel(int y)
+{
+	yvel = y;
+}
+
+int Moveable::getXVel()
+{
+	return xvel;
+}
+
+int Moveable::getYVel()
+{
+	return yvel;
+}
+#pragma endregion Moveable Class
 
 
 //Character Class and Functions
@@ -697,8 +711,6 @@ void Character::move()
 	if (jumping)
 	{
 		yvel += Y_VELOCITY;
-		if (yvel > MAX_Y_VELOCITY)
-			yvel = MAX_Y_VELOCITY;
 
 		if (frame - beginFrame < 2)
 			currentClip++;
@@ -714,6 +726,9 @@ void Character::move()
 		jumpable = false;
 
 		yvel += Y_VELOCITY;
+		if (yvel > MAX_Y_VELOCITY)
+			yvel = MAX_Y_VELOCITY;
+
 		if (collision[BOTTOM])
 		{
 			if (((box.x >= ground_tile.x && box.x <= ground_tile.x + ground_tile.w) ||
@@ -963,7 +978,7 @@ void Character::damage(int amount)
 }
 #pragma endregion Character Class
 
-//Character
+//******THE PLAYER**********
 Character Player;
 
 
@@ -1004,7 +1019,8 @@ SmallOrc::SmallOrc(SDL_Texture *texture, int x, int y)
 {
 	state = STANDING_LEFT;
 	X_VELOCITY = 4;
-	Y_VELOCITY = -10;
+	Y_VELOCITY = 1;
+	MAX_Y_VELOCITY = 10;
 
 	index = 1;
 	angle = 0;
@@ -1087,22 +1103,6 @@ void SmallOrc::update()
 			xvel = X_VELOCITY;
 		}
 
-		if (falling)
-		{
-			yvel += 1;
-			if (collision[BOTTOM])
-			{
-				if (((box.x >= ground_tile.x && box.x <= ground_tile.x + ground_tile.w) ||
-					(box.x <= ground_tile.x && (box.x + box.w) >= ground_tile.x)) &&
-					box.y >= ground_tile.y - 50)
-				{
-					box.y = ground_tile.y - box.h+5;
-					yvel = 0;
-					falling = false;
-				}
-			}
-		}
-
 		if (frame-beginFrame > 60)
 		{
 			if (state == RUNNING_LEFT)
@@ -1121,6 +1121,22 @@ void SmallOrc::update()
 		{
 			xvel = 0;
 			setState(STANDING_RIGHT);
+		}
+	}
+
+	if (falling)
+	{
+		yvel += Y_VELOCITY;
+		if (collision[BOTTOM])
+		{
+			if (((box.x >= ground_tile.x && box.x <= ground_tile.x + ground_tile.w) ||
+				(box.x <= ground_tile.x && (box.x + box.w) >= ground_tile.x)) &&
+				box.y >= ground_tile.y - 75)
+			{
+				box.y = ground_tile.y - box.h+5;
+				yvel = 0;
+				falling = false;
+			}
 		}
 	}
 
@@ -1353,12 +1369,14 @@ void EnemyManager::collisionManager(SmallOrc* orc)
 
 		if (enemy.x < player.x)
 		{
-			orc->box.x -= 10;
+			if (!orc->collision[LEFT])
+				orc->box.x -= 10;
 			orc->aggroState = orc->RUNNING_RIGHT;
 		}
 		else
 		{
-			orc->box.x += 10;
+			if (!orc->collision[RIGHT])
+				orc->box.x += 10;
 			orc->aggroState = orc->RUNNING_LEFT;
 		}
 	}
@@ -1374,12 +1392,14 @@ void EnemyManager::collisionManager(SmallOrc* orc)
 		orc->setState(orc->RECOVER);
 		if ((star && enemy.x < NJbox.x) || (sword && enemy.x < swordBox.x))
 		{
-			orc->box.x -= 10;
+			if (!orc->collision[LEFT])
+				orc->box.x -= 10;
 			orc->aggroState = orc->RUNNING_RIGHT;
 		}
 		else
 		{
-			orc->box.x += 10;
+			if (!orc->collision[RIGHT])
+				orc->box.x += 10;
 			orc->aggroState = orc->RUNNING_LEFT;
 		}
 		Player.delNinjaStar();
@@ -1391,19 +1411,152 @@ void EnemyManager::collisionManager(SmallOrc* orc)
 }
 #pragma endregion EnemyManager Class
 
-//Enemy Manager
-EnemyManager EnemyMang;
 
+//****THE ENEMY MANAGER****
+EnemyManager EnemyMang;
+#pragma endregion Moveables (with Enemy Manager)
+
+//******************************** END MOVEABLE WITH SUBCLASSES AND MANAGER ******************************
+
+
+
+
+
+
+//************************************ INTERACTION WITH AI **************************************************
+
+#pragma region AI
+//Button Class and Functions
+#pragma region Button
+class Button
+{
+public:
+	typedef enum { SUBMENU, BUY_NINJA_STARS, BUY_POTIONS } types;
+
+	Button(std::string STRING, types type);
+	void loadButton(int x, int y);
+	void draw();
+
+	SDL_Rect getBox();
+	void action();
+
+private:
+	std::string STRING;
+	SDL_Texture* texture;
+	SDL_Rect box;
+
+	types type;
+};
+
+Button::Button(std::string STRING, types type)
+{
+	this->STRING = STRING;
+	this->type = type;
+}
+
+void Button::loadButton(int x, int y)
+{
+	box.x = x;
+	box.y = y;
+
+	texture = loadText(STRING, -1, scriptFont, &box);
+}
+
+void Button::draw()
+{
+	SDL_Rect destination = { box.x - Camera.x, box.y - Camera.y, box.w, box.h };
+	SDL_RenderCopy(renderer, texture, NULL, &destination);
+}
+
+SDL_Rect Button::getBox()
+{
+	return box;
+}
+
+void Button::action()
+{
+	switch (type)
+	{
+	case BUY_NINJA_STARS:
+		Player.addNinjaStars(5);
+		break;
+	}
+}
+#pragma endregion Button Class
+
+//Menu Class and Functions
+#pragma region Menu
+class Menu
+{
+public:
+	Menu();
+	void addButton(Button button);
+	void update(SDL_Event event);
+	void draw();
+
+private:
+	std::vector<Button> buttons;
+	SDL_Rect box;
+
+	bool checkInside(SDL_Point point, SDL_Rect box);
+};
+
+Menu::Menu()
+{
+}
+
+bool Menu::checkInside(SDL_Point point, SDL_Rect box)
+{
+	if (point.x < box.x || point.x > box.x + box.w || point.y < box.y || point.y > box.y + box.h)
+		return false;
+
+	return true;
+}
+
+void Menu::addButton(Button button)
+{
+	buttons.push_back(button);
+}
+
+void Menu::update(SDL_Event event)
+{
+	if (event.type == SDL_MOUSEBUTTONDOWN)
+	{
+		if (event.button.button == SDL_BUTTON_LEFT)
+		{
+			SDL_Point mouse;
+			SDL_GetMouseState( &mouse.x, &mouse.y );
+
+			for (int i = 0; i < buttons.size(); i++)
+			{
+				if (checkInside(mouse, buttons.at(i).getBox()))
+				{
+					buttons.at(i).action();
+				}
+			}
+		}
+	}
+}
+
+void Menu::draw()
+{
+	for (int i = 0; i < buttons.size(); i++)
+	{
+		buttons.at(i).draw();
+	}
+}
+#pragma endregion Menu Class
 
 //AI Class and Functions
 #pragma region AI
 class AI
 {
 public:
-	typedef enum { STANDING, SPEAKING } states;
+	typedef enum { STANDING, SPEAKING, MENUING } states;
+	typedef enum { WIZARD, ROBOT } types;
 
 	AI();
-	AI(int x, int y, SDL_Texture* texture, std::vector<std::string> script);
+	AI(int x, int y, SDL_Texture* texture, types type, std::vector<std::string> script);
 	void handleInput(SDL_Event event);
 	void update();
 	void draw();
@@ -1411,9 +1564,13 @@ public:
 	SDL_Rect getBox();
 	void setState(states state);
 	states getState();
+	void setMenu(Menu menu);
 
 private:
 	states state;
+	types type;
+
+	Menu menu;
 
 	SDL_Rect box;
 	SDL_Rect clip;
@@ -1433,20 +1590,25 @@ AI::AI()
 {
 }
 
-AI::AI(int x, int y, SDL_Texture* texture, std::vector<std::string> script)
+AI::AI(int x, int y, SDL_Texture* texture, types type, std::vector<std::string> script)
 {
 	state = STANDING;
 
+	this->type = type;
 	this->script = script;
 	this->texture = texture;
 
 	box.x = x;
-	box.y = y-37;
+	box.y = y-35;
 	box.w = 50;
-	box.h = 77;
+	box.h = 75;
 
-	SDL_Rect temp = { 0, 0, 50, 77 };
+	SDL_Rect temp = { 0, 0, 50, 0 };
 	clip = temp;
+	if (type == WIZARD)
+		clip.h = 90;
+	else if (type == ROBOT)
+		clip.h = 95;
 
 	SDL_Rect leftTemp = { 0, 0, 5, 40 };
 	SDL_Rect rightTemp = { 35, 0, 5, 40 };
@@ -1546,9 +1708,14 @@ AI::states AI::getState()
 {
 	return state;
 }
+
+void AI::setMenu(Menu menu)
+{
+	this->menu = menu;
+}
 #pragma endregion AI Class
 
-//Global AI (to determine control)
+//********* THE GLOBAL AI ***********
 AI* SpeakingAI = NULL;
 
 //AI Manager Class and Functions
@@ -1558,20 +1725,35 @@ class AIManager
 private:
 	std::vector<AI> bots;
 	SDL_Texture* wizard_texture;
+	SDL_Texture* robot_texture;
 	std::vector<std::string> start_wizard_script;
+	std::vector<std::string> robot_script;
+
+	int current_AI;
+
+	//Possible menus and buttons
+	Menu shop;
 
 public:
-	typedef enum { WIZARD } types;
 	void load();
-	void addAI(int x, int y, types type);
+	void addAI(int x, int y, AI::types type);
 	void update();
 	void draw();
 };
 
 void AIManager::load()
 {
-	wizard_texture = loadImage("Media/wizard.png");
+	current_AI = 0;
 
+	//Textures
+	wizard_texture = loadImage("Media/wizard.png");
+	robot_texture = loadImage("Media/robot.png");
+
+	//Menus and Buttons
+	Button buy_ninja_stars("Ninja Stars", Button::BUY_NINJA_STARS);
+	shop.addButton(buy_ninja_stars);
+
+	//Scripts
 	input_file.open("Media/Scripts/start_wizard.txt");
 	if (input_file.is_open())
 	{
@@ -1582,16 +1764,37 @@ void AIManager::load()
 			start_wizard_script.push_back(line);
 		}
 	}
+
+	input_file.close();
+
+	input_file.open("Media/Scripts/robot.txt");
+	if (input_file.is_open())
+	{
+		while (!input_file.eof())
+		{
+			std::string line;
+			getline(input_file, line);
+			robot_script.push_back(line);
+		}
+	}
+
+	input_file.close();
 }
 
-void AIManager::addAI(int x, int y, types type)
+void AIManager::addAI(int x, int y, AI::types type)
 {
 	switch (type)
 	{
-	case WIZARD:
-		bots.push_back(AI(x, y, wizard_texture, start_wizard_script));
+	case AI::WIZARD:
+		bots.push_back(AI(x, y, wizard_texture, AI::WIZARD, start_wizard_script));
+		break;
+	case AI::ROBOT:
+		bots.push_back(AI(x, y, robot_texture, AI::ROBOT, robot_script));
+		bots.at(current_AI).setMenu(shop);
 		break;
 	}
+
+	current_AI++;
 }
 
 void AIManager::update()
@@ -1601,7 +1804,7 @@ void AIManager::update()
 		if (checkCollision(Camera, bots.at(i).getBox()))
 		{
 			bots.at(i).update();
-			if (bots.at(i).getState() == AI::SPEAKING)
+			if (bots.at(i).getState() == AI::SPEAKING || bots.at(i).getState() == AI::MENUING)
 				SpeakingAI = &bots.at(i);
 		}
 	}
@@ -1615,12 +1818,24 @@ void AIManager::draw()
 			bots.at(i).draw();
 	}
 }
-#pragma endregion AIMAnager Class
+#pragma endregion AIManager Class
 
-//AI Manager
+//********** THE AI MANAGER ********
 AIManager AIMang;
+#pragma endregion AI with Interaction
+
+//******************************************* END INTERACTION WITH AI **************************
 
 
+
+
+
+
+
+
+//********************************************** TREASURE CHESTS **********************************
+
+#pragma region Treasure Chests
 //Treasure Chest Class and Functions
 #pragma region TreasureChest
 class TreasureChest
@@ -1773,8 +1988,17 @@ void TreasureChestManager::draw()
 }
 #pragma endregion TreasureChestManager Class
 
+//********** THE TREASURE CHEST MANAGER *************
 TreasureChestManager TreasureChestMang;
+#pragma endregion Treasure Chests
 
+//**************************************************** END TREASURE CHESTS *************************************
+
+
+
+
+
+//*************************************************** LEVEL MANAGER ****************************************
 
 //Level Manager Class and Functions
 #pragma region LevelManager
@@ -1791,7 +2015,7 @@ public:
 
 		MCH, //Main Character
 		SOR, //Small Orc
-		WIZ, //Wizard AI
+		WIZ, ROB, //AIs
 		TC1 //Treasure Chests
 	} textures;
 
@@ -1801,20 +2025,11 @@ public:
 	void loadLevel(level_type level);
 	void draw();
 
-	void loadLevelFromText(std::string filename, level_type level);
-	textures stringToEnum(std::string enumString);
-
-	int getWidth();
-	int getHeight();
-	int getSize();
-
-	SDL_Rect getBoxes(int i);
-	Tile** getLevel();
-
 private:
 	//Global
 	int texel_height;
 	int texel_width;
+	SDL_Rect *background;
 
 	//Level index
 	int current_level;
@@ -1828,8 +2043,6 @@ private:
 	int home_level_height;
 	int home_level_size;
 	SDL_Texture *home_level_background[2];
-	SDL_Texture *home_level_textures[780];
-	SDL_Rect *background;
 	Tile *home_level[780];
 	textures home_level_blueprint[780];
 
@@ -1840,7 +2053,6 @@ private:
 	int levelone_level_height;
 	int levelone_level_size;
 	SDL_Texture *levelone_level_background[2];
-	SDL_Texture *levelone_level_textures[3540];
 	Tile *levelone_level[3540];
 	textures levelone_level_blueprint[3540];
 
@@ -1886,6 +2098,8 @@ private:
 #pragma endregion Texture Declarations
 
 	void buildLevel(textures blueprint[], Tile *level_boxes[], int height, int width, int tex_width, int tex_height);
+	void LevelManager::loadLevelFromText(std::string filename, level_type level);
+	LevelManager::textures LevelManager::stringToEnum(std::string enumString);
 };
 
 void LevelManager::loadTextures()
@@ -1963,31 +2177,24 @@ void LevelManager::initializeLevels()
 	//Home level
 	home_texelw = 40;
 	home_texelh = 40;
+
 	home_level_width = 65;
 	home_level_height = 12;
 	home_level_size = home_level_width*home_level_height;
+
 	home_level_background[0] = far_background;
 	home_level_background[1] = NULL;
-	loadLevelFromText("levelhome.txt", HOME_LEVEL);
+	loadLevelFromText("Media/Levels/levelhome.txt", HOME_LEVEL);
 
 	//level one
 	levelone_texelw = 40;
 	levelone_texelh = 40;
 	levelone_level_width = 295;
 	levelone_level_height = 12;
-	levelone_level_size = home_level_width*home_level_height;
+	levelone_level_size = levelone_level_width*levelone_level_height;
 	levelone_level_background[0] = far_background;
 	levelone_level_background[1] = NULL;
-	loadLevelFromText("levelone.txt", LEVEL_ONE);
-	
-	// DEBUG: setting current level equal to a specific level to ensure it initializes correctly - needs to be corrected
-	current_level = LEVEL_ONE;
-
-	if (current_level == HOME_LEVEL)
-		buildLevel(home_level_blueprint, home_level, home_level_height, home_level_width, home_texelw, home_texelh);
-	
-	else if (current_level == LEVEL_ONE)
-		buildLevel(levelone_level_blueprint, levelone_level, levelone_level_height, levelone_level_width, levelone_texelw, levelone_texelh);
+	loadLevelFromText("Media/Levels/levelone.txt", LEVEL_ONE);
 }
 
 void LevelManager::loadLevel(level_type level)
@@ -1996,19 +2203,28 @@ void LevelManager::loadLevel(level_type level)
 	switch (current_level)
 	{
 	case HOME_LEVEL:
-		current_width = home_level_width;
-		current_height = home_level_height;
+		buildLevel(home_level_blueprint, home_level, home_level_height, home_level_width, home_texelw, home_texelh);
+
+		CurrentLevel = home_level;
 		texel_width = home_texelw;
 		texel_height = home_texelh;
+		LevelWidth = home_level_width*home_texelw;
+		LevelHeight = home_level_height*home_texelh;
+		LevelSize = home_level_width*home_level_height;
+		Background = home_level_background;
 		break;
 	case LEVEL_ONE:
-		current_width = levelone_level_width;
-		current_height = levelone_level_height;
+		buildLevel(levelone_level_blueprint, levelone_level, levelone_level_height, levelone_level_width, levelone_texelw, levelone_texelh);
+
+		CurrentLevel = levelone_level;
 		texel_width = levelone_texelw;
 		texel_height = levelone_texelh;
+		LevelWidth = levelone_level_width*home_texelw;
+		LevelHeight = levelone_level_height*home_texelh;
+		LevelSize = levelone_level_width*home_level_height;
+		Background = levelone_level_background;
 		break;
 	}
-
 }
 
 void LevelManager::buildLevel(textures blueprint[], Tile *level_boxes[], int height, int width, int tex_width, int tex_height)
@@ -2132,7 +2348,11 @@ void LevelManager::buildLevel(textures blueprint[], Tile *level_boxes[], int hei
 			break;
 		case WIZ:
 			level = NULL;
-			AIMang.addAI((i%width)*tex_width, (i/width)*tex_height, AIManager::WIZARD);
+			AIMang.addAI((i%width)*tex_width, (i/width)*tex_height, AI::WIZARD);
+			break;
+		case ROB:
+			level = NULL;
+			AIMang.addAI((i%width)*tex_width, (i/width)*tex_height, AI::ROBOT);
 			break;
 		case TC1:
 			level = NULL;
@@ -2149,72 +2369,18 @@ void LevelManager::buildLevel(textures blueprint[], Tile *level_boxes[], int hei
 
 void LevelManager::draw()
 {
-	if (current_level == HOME_LEVEL)
+	for (int i = 0; i < 2; i++)
 	{
-		for (int i = 0; i < 2; i++)
-		{
-			if (home_level_background[i] == NULL)
-				continue;
-			SDL_RenderCopy(renderer, home_level_background[i], NULL, background);
-		}
-		for (int i = 0; i < home_level_width*home_level_height; i++)
-		{
-			if (home_level[i] == NULL)
-				continue;
-			home_level[i]->draw(Camera, renderer);
-		}
+		if (Background[i] == NULL)
+			continue;
+		SDL_RenderCopy(renderer, Background[i], NULL, background);
 	}
-
-	else if (current_level == LEVEL_ONE)
+	for (int i = 0; i < LevelWidth/40*LevelHeight/40; i++)
 	{
-		for (int i = 0; i < 2; i++)
-		{
-			if (levelone_level_background[i] == NULL)
-				continue;
-			SDL_RenderCopy(renderer, levelone_level_background[i], NULL, background);
-		}
-		for (int i = 0; i < levelone_level_width*levelone_level_height; i++)
-		{
-			if (levelone_level[i] == NULL)
-				continue;
-			levelone_level[i]->draw(Camera, renderer);
-		}
+		if (CurrentLevel[i] == NULL)
+			continue;
+		CurrentLevel[i]->draw(Camera, renderer);
 	}
-
-}
-
-int LevelManager::getWidth()
-{
-	return current_width*texel_width;
-}
-
-int LevelManager::getHeight()
-{
-	return current_height*texel_height;
-}
-
-int LevelManager::getSize()
-{
-	return current_width*current_height;
-}
-
-SDL_Rect LevelManager::getBoxes(int i)
-{
-	if (current_level == HOME_LEVEL && home_level[i] != NULL)
-		return home_level[i]->getBox();
-	else if (current_level == LEVEL_ONE && levelone_level[i] != NULL)
-		return levelone_level[i]->getBox();
-	SDL_Rect temp =  { 0, 0, 0, 0 };
-	return temp;
-}
-
-Tile** LevelManager::getLevel()
-{
-	if (current_level == HOME_LEVEL)
-		return home_level;
-	else if (current_level == LEVEL_ONE)
-		return levelone_level;
-	return NULL;
 }
 
 void LevelManager::loadLevelFromText(std::string filename, level_type level)
@@ -2243,7 +2409,9 @@ void LevelManager::loadLevelFromText(std::string filename, level_type level)
 	
 }
 
-LevelManager::textures LevelManager::stringToEnum(std::string enumString){
+LevelManager::textures LevelManager::stringToEnum(std::string enumString)
+{
+#pragma region Conversions
 	if (enumString == "NE1")
 		return NE1;
 	else if (enumString == "NW1")
@@ -2312,16 +2480,23 @@ LevelManager::textures LevelManager::stringToEnum(std::string enumString){
 		return SOR;
 	else if (enumString == "WIZ")
 		return WIZ;
+	else if (enumString == "ROB")
+		return ROB;
 	else if (enumString == "TC1")
 		return TC1;
 	else
 		return NON;
+#pragma endregion Conversions
 }
-
 #pragma endregion LevelManager Class
 
-//Level Manager
+//******** THE LEVEL MANAGER ********
 LevelManager LevelMang;
+
+//************************************************** END LEVEL MANAGER ***********************************
+
+
+
 
 
 #pragma region Main
@@ -2377,6 +2552,9 @@ bool loadFiles()
 	LevelMang.loadTextures();
 	LevelMang.initializeLevels();
 
+	//Initialize to home level
+	LevelMang.loadLevel(LevelMang.LEVEL_ONE);
+
 	Player.load();
 	Player.init(start_x, start_y);
 
@@ -2421,11 +2599,6 @@ void collisionManager()
 
 void update()
 {
-	CurrentLevel = LevelMang.getLevel();
-	LevelWidth = LevelMang.getWidth();
-	LevelHeight = LevelMang.getHeight();
-	LevelSize = LevelMang.getSize();
-
 	collisionManager();
 
 	Player.move();
@@ -2436,7 +2609,7 @@ void update()
 
 	AIMang.update();
 
-	setCamera(Player.getBox(), LevelMang.getWidth(), LevelMang.getHeight());
+	setCamera(Player.getBox(), LevelWidth, LevelHeight);
 
 	//Reset the player's actionCheck
 	Player.resetActionCheck();
@@ -2476,9 +2649,6 @@ int main( int argc, char* args[] )
 	//Load all files
 	if (loadFiles() == false)
 		return 1;
-
-	//Initialize to home level
-	LevelMang.loadLevel(LevelMang.LEVEL_ONE);
 
 	//Main game loop
 	while (!quit)
