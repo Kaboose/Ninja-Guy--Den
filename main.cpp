@@ -15,9 +15,6 @@ ifstream input_file;
 typedef enum { PLAYING, AI_SPEAKING } GAME_STATES;
 GAME_STATES GAME_STATE = PLAYING;
 
-typedef enum { SMALL_ORC } enemies_type;
-int num_small_orcs = 0;
-
 //Used for determing where collisions are
 typedef enum { LEFT = 0, RIGHT, BOTTOM } sides;
 
@@ -1402,32 +1399,46 @@ EnemyManager EnemyMang;
 #pragma region AI
 class AI
 {
-private:
-	typedef enum { STANDING, SPEAKING } states;
-	states state;
-	SDL_Rect box;
-	SDL_Rect clip;
-	std::vector<std::string> script;
-	int currentLine;
-	SDL_Texture* text;
-	SDL_Rect textBox;
-	SDL_Rect leftBox, rightBox, areaBox;
-	SDL_Rect leftClip, rightClip, areaClip;
-
 public:
-	void init(int x, int y);
+	typedef enum { STANDING, SPEAKING } states;
+
+	AI();
+	AI(int x, int y, SDL_Texture* texture, std::vector<std::string> script);
 	void handleInput(SDL_Event event);
 	void update();
 	void draw();
 
+	SDL_Rect getBox();
 	void setState(states state);
+	states getState();
 
+private:
+	states state;
+
+	SDL_Rect box;
+	SDL_Rect clip;
+
+	std::vector<std::string> script;
+	int currentLine;
+
+	SDL_Texture* text;
 	SDL_Texture *texture;
+
+	SDL_Rect textBox;
+	SDL_Rect leftBox, rightBox, areaBox;
+	SDL_Rect leftClip, rightClip, areaClip;
 };
 
-void AI::init(int x, int y)
+AI::AI()
+{
+}
+
+AI::AI(int x, int y, SDL_Texture* texture, std::vector<std::string> script)
 {
 	state = STANDING;
+
+	this->script = script;
+	this->texture = texture;
 
 	box.x = x;
 	box.y = y-37;
@@ -1448,17 +1459,6 @@ void AI::init(int x, int y)
 	leftBox.h = 40;
 	rightBox.w = 5;
 	rightBox.h = 40;
-
-	input_file.open("Media/Scripts/start_wizard.txt");
-	if (input_file.is_open())
-	{
-		while (!input_file.eof())
-		{
-			std::string line;
-			getline(input_file, line);
-			script.push_back(line);
-		}
-	}
 
 	currentLine = 0;
 }
@@ -1532,17 +1532,93 @@ void AI::draw()
 	}
 }
 
+SDL_Rect AI::getBox()
+{
+	return box;
+}
+
 void AI::setState(states state)
 {
 	this->state = state;
+}
+
+AI::states AI::getState()
+{
+	return state;
 }
 #pragma endregion AI Class
 
 //Global AI (to determine control)
 AI* SpeakingAI = NULL;
 
-//Sample wizard
-AI wizard;
+//AI Manager Class and Functions
+#pragma region AIManager
+class AIManager
+{
+private:
+	std::vector<AI> bots;
+	SDL_Texture* wizard_texture;
+	std::vector<std::string> start_wizard_script;
+
+public:
+	typedef enum { WIZARD } types;
+	void load();
+	void addAI(int x, int y, types type);
+	void update();
+	void draw();
+};
+
+void AIManager::load()
+{
+	wizard_texture = loadImage("Media/wizard.png");
+
+	input_file.open("Media/Scripts/start_wizard.txt");
+	if (input_file.is_open())
+	{
+		while (!input_file.eof())
+		{
+			std::string line;
+			getline(input_file, line);
+			start_wizard_script.push_back(line);
+		}
+	}
+}
+
+void AIManager::addAI(int x, int y, types type)
+{
+	switch (type)
+	{
+	case WIZARD:
+		bots.push_back(AI(x, y, wizard_texture, start_wizard_script));
+		break;
+	}
+}
+
+void AIManager::update()
+{
+	for (int i = 0; i < bots.size(); i++)
+	{
+		if (checkCollision(Camera, bots.at(i).getBox()))
+		{
+			bots.at(i).update();
+			if (bots.at(i).getState() == AI::SPEAKING)
+				SpeakingAI = &bots.at(i);
+		}
+	}
+}
+
+void AIManager::draw()
+{
+	for (int i = 0; i < bots.size(); i++)
+	{
+		if (checkCollision(Camera, bots.at(i).getBox()))
+			bots.at(i).draw();
+	}
+}
+#pragma endregion AIMAnager Class
+
+//AI Manager
+AIManager AIMang;
 
 
 //Treasure Chest Class and Functions
@@ -2031,7 +2107,7 @@ void LevelManager::buildLevel(textures blueprint[], Tile *level_boxes[], int hei
 			break;
 		case WIZ:
 			level = NULL;
-			wizard.init((i%width)*tex_width, (i/width)*tex_height);
+			AIMang.addAI((i%width)*tex_width, (i/width)*tex_height, AIManager::WIZARD);
 			break;
 		case TC1:
 			level = NULL;
@@ -2148,6 +2224,7 @@ bool loadFiles()
 {
 	EnemyMang.load();
 	TreasureChestMang.load();
+	AIMang.load();
 
 	LevelMang.loadTextures();
 	LevelMang.initializeLevels();
@@ -2155,7 +2232,6 @@ bool loadFiles()
 	Player.load();
 	Player.init(start_x, start_y);
 
-	wizard.texture = loadImage("Media/wizard.png");
 	textArea = loadImage("Media/Fonts/textbox.png");
 
 	return true;
@@ -2210,8 +2286,7 @@ void update()
 
 	TreasureChestMang.update();
 
-	//******GOING TO BE CHANGED*******
-	wizard.update();
+	AIMang.update();
 
 	setCamera(Player.getBox(), LevelMang.getWidth(), LevelMang.getHeight());
 
@@ -2226,8 +2301,8 @@ void draw()
 	SDL_RenderCopy(renderer, screen, NULL, NULL);
 
 	LevelMang.draw();
-	wizard.draw();
 	TreasureChestMang.draw();
+	AIMang.draw();
 	Player.show(Camera.x, Camera.y);
 	EnemyMang.draw();
 
@@ -2240,7 +2315,6 @@ void draw()
 
 int main( int argc, char* args[] )
 {
-	SpeakingAI = &wizard;
 	//Main quit variable
     bool quit = false;
 
