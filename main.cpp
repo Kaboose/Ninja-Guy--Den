@@ -247,10 +247,13 @@ public:
 	SDL_RendererFlip flip;
 
 	bool done;
+
+	bool notDamagedYet;
 };
 
 void Sword::init(SDL_Texture* texture, SDL_Rect box, SDL_RendererFlip flip)
 {
+	notDamagedYet = true;
 	start = frame;
 	this->texture = texture;
 	this->flip = flip;
@@ -404,6 +407,7 @@ private:
 	int lastSwing;
 	int lastA;
 	int lastD;
+	int invulnerableTimeLeft;
 
 	//These are for preventing conflicts: walking and jumping, walking two directions, jumping twice, etc
 	bool jumping;
@@ -417,6 +421,7 @@ private:
 	bool throwing;
 	bool swinging;
 	bool actionCheck;
+	bool flashing;
 
 	//NinjaStar
 	NinjaStar ninja_star;
@@ -436,11 +441,13 @@ public:
 	void move(); //Moves the character
 	void handleInput(SDL_Event event); //Handles the input
 	void show(int x, int y); //Draws the character on the screen
+	void changeSwordState();
 
 	bool checkAction();
 	void resetActionCheck();
 	void checkCollision();
 	bool collision[3];
+	bool invulnerable;
 
 	//Ninja star
 	void addNinjaStars(int amount);
@@ -452,6 +459,7 @@ public:
 	SDL_Rect getSwordBox();
 	void delSword();
 	int swordDamage();
+	Sword getSword();
 
 	//Health
 	void drawStats();
@@ -505,6 +513,7 @@ Character::Character()
 	lastThrow = 0;
 	lastA = -30;
 	lastD = -30;
+	invulnerableTimeLeft = 0;
 
 	jumping = false;
 	falling = false;
@@ -517,6 +526,8 @@ Character::Character()
 	throwing = false;
 	swinging = false;
 	actionCheck = false;
+	invulnerable = false;
+	flashing = false;
 
 	//Health
 	health = 100;
@@ -684,7 +695,7 @@ void Character::handleInput(SDL_Event event)
 				numNinjaStars--;
 			}
 		}
-		else if (event.button.button == SDL_BUTTON_LEFT &&!swinging && !jumping)
+		else if (event.button.button == SDL_BUTTON_LEFT &&!swinging)
 		{
 			SDL_RendererFlip flip;
 			if (direction == FACE_RIGHT)
@@ -696,9 +707,6 @@ void Character::handleInput(SDL_Event event)
 			swinging = true;
 			lastSwing = frame;
 
-			walkable = false;
-			walkLeft = false;
-			walkRight = false;
 		}
 	}
 }
@@ -840,8 +848,28 @@ void Character::show(int x, int y)
 
 	SDL_Rect destination = { box.x - x, box.y - y, box.w, box.h };
 
+	
+	if (invulnerable && invulnerableTimeLeft > 0)
+	{
+		if (invulnerableTimeLeft % 5 == 0)
+			flashing = true;
+		else
+			flashing = false;
+
+		invulnerableTimeLeft--;
+
+	}
+	else
+	{
+		invulnerable = false;
+		flashing = false;
+	}
+
 	//LazyFoo** must pass in the renderer, texture, reference to the sprite (as a rectangle), and reference to the destination on the screen
-	SDL_RenderCopy(renderer, texture, &clip[currentClip], &destination);
+	if (flashing)
+		SDL_RenderCopy(renderer, NULL, &clip[currentClip], &destination);
+	else
+		SDL_RenderCopy(renderer, texture, &clip[currentClip], &destination);
 
 	if (swinging)
 		sword.draw();
@@ -975,6 +1003,18 @@ void Character::drawStats()
 void Character::damage(int amount)
 {
 	health -= amount;
+	invulnerable = true;
+	invulnerableTimeLeft = 90;
+}
+
+Sword Character::getSword()
+{
+	return sword;
+}
+
+void Character::changeSwordState()
+{
+	sword.notDamagedYet = !sword.notDamagedYet;
 }
 #pragma endregion Character Class
 
@@ -1351,7 +1391,7 @@ void EnemyManager::collisionManager(SmallOrc* orc)
 	}
 		
 	//Damage with player
-	if (checkCollision(player, enemy))
+	if (!Player.invulnerable && checkCollision(player, enemy))
 	{
 		Player.damage(5);
 		if (Player.getYVel() > 0)
@@ -1386,27 +1426,40 @@ void EnemyManager::collisionManager(SmallOrc* orc)
 	SDL_Rect swordBox = Player.getSwordBox();
 	bool star = checkCollision(enemy, NJbox);
 	bool sword = checkCollision(enemy, swordBox);
+	Sword currentSword = Player.getSword();
 
-	if ( (star || sword) && orc->getState() != orc->RECOVER)
+	if (star || sword)
 	{
-		orc->setState(orc->RECOVER);
-		if ((star && enemy.x < NJbox.x) || (sword && enemy.x < swordBox.x))
+		if (currentSword.notDamagedYet && sword)
 		{
-			if (!orc->collision[LEFT])
-				orc->box.x -= 10;
-			orc->aggroState = orc->RUNNING_RIGHT;
-		}
-		else
-		{
-			if (!orc->collision[RIGHT])
-				orc->box.x += 10;
-			orc->aggroState = orc->RUNNING_LEFT;
-		}
-		Player.delNinjaStar();
+			orc->setState(orc->RECOVER);
+			if ((star && enemy.x < NJbox.x) || (sword && enemy.x < swordBox.x))
+			{
+				if (!orc->collision[LEFT])
+					orc->box.x -= 10;
+				orc->aggroState = orc->RUNNING_RIGHT;
+			}
+			else
+			{
+				if (!orc->collision[RIGHT])
+					orc->box.x += 10;
+				orc->aggroState = orc->RUNNING_LEFT;
+			}
+				orc->health -= Player.swordDamage();
+			if (orc->health <= 0)
+				orc->setState(orc->DEAD);
 
-		orc->health -= (star ? Player.ninjaStarDamage() : Player.swordDamage());
-		if (orc->health <= 0)
-			orc->setState(orc->DEAD);
+				Player.changeSwordState();
+		}
+
+			Player.delNinjaStar();
+
+			if (star)
+				orc->health -= Player.ninjaStarDamage();
+
+			if (orc->health <= 0)
+				orc->setState(orc->DEAD);
+
 	}
 }
 #pragma endregion EnemyManager Class
@@ -2232,7 +2285,7 @@ void LevelManager::buildLevel(textures blueprint[], Tile *level_boxes[], int hei
 	for (int i = 0; i < height*width; i++)
 	{
 		bool solid = true;
-		SDL_Texture *level;
+		SDL_Texture *level = NULL;
 
 		switch (blueprint[i])
 		{
