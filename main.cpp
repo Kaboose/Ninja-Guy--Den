@@ -15,6 +15,10 @@ ifstream input_file;
 typedef enum { PLAYING, AI_SPEAKING } GAME_STATES;
 GAME_STATES GAME_STATE = PLAYING;
 
+//Levels
+typedef enum { HOME_LEVEL, LEVEL_ONE } level_type;
+level_type current_level;
+
 //Used for determing where collisions are
 typedef enum { LEFT = 0, RIGHT, BOTTOM } sides;
 
@@ -247,13 +251,10 @@ public:
 	SDL_RendererFlip flip;
 
 	bool done;
-
-	bool notDamagedYet;
 };
 
 void Sword::init(SDL_Texture* texture, SDL_Rect box, SDL_RendererFlip flip)
 {
-	notDamagedYet = true;
 	start = frame;
 	this->texture = texture;
 	this->flip = flip;
@@ -401,13 +402,22 @@ private:
 	SDL_Texture *ninja_star_texture;
 	SDL_Texture *sword_texture;
 	SDL_Texture* health_bar;
+	SDL_Texture* mana_bar;
+
+	//Magic textures
+	SDL_Texture *fire;
+	SDL_Texture *ice;
+	SDL_Texture *rock;
+	SDL_Texture *magic;
+
+	//Magic rectangles
+	SDL_Rect tornadoClip;
 
 	int beginFrame; //Used to know when buttons were pressed to regulate animation properly
 	int lastThrow;
 	int lastSwing;
 	int lastA;
 	int lastD;
-	int invulnerableTimeLeft;
 
 	//These are for preventing conflicts: walking and jumping, walking two directions, jumping twice, etc
 	bool jumping;
@@ -421,7 +431,6 @@ private:
 	bool throwing;
 	bool swinging;
 	bool actionCheck;
-	bool flashing;
 
 	//NinjaStar
 	NinjaStar ninja_star;
@@ -430,9 +439,15 @@ private:
 	//Sword
 	Sword sword;
 
-	//Health
-	int health;
-	SDL_Rect health_box;
+	//Health/Mana
+	int health, mana;
+	SDL_Rect health_box, mana_box;
+
+	//Magic
+	int magicIndex;
+	int magicCapacity;
+	typedef enum { FIRE, ICE, EARTH, WIND } spells;
+	spells magicArray[4];
 
 public:
 	Character(); //Constructor
@@ -441,13 +456,11 @@ public:
 	void move(); //Moves the character
 	void handleInput(SDL_Event event); //Handles the input
 	void show(int x, int y); //Draws the character on the screen
-	void changeSwordState();
 
 	bool checkAction();
 	void resetActionCheck();
 	void checkCollision();
 	bool collision[3];
-	bool invulnerable;
 
 	//Ninja star
 	void addNinjaStars(int amount);
@@ -459,11 +472,11 @@ public:
 	SDL_Rect getSwordBox();
 	void delSword();
 	int swordDamage();
-	Sword getSword();
 
-	//Health
+	//Health/Mana
 	void drawStats();
 	void damage(int amount);
+	void cast(int amount);
 
 	SDL_Texture* loadImage(const char *filename);
 };
@@ -513,7 +526,6 @@ Character::Character()
 	lastThrow = 0;
 	lastA = -30;
 	lastD = -30;
-	invulnerableTimeLeft = 0;
 
 	jumping = false;
 	falling = false;
@@ -526,19 +538,29 @@ Character::Character()
 	throwing = false;
 	swinging = false;
 	actionCheck = false;
-	invulnerable = false;
-	flashing = false;
 
-	//Health
+	//Health/Mana
 	health = 100;
 	SDL_Rect temp = { 10, 50, health*3, 10 };
 	health_box = temp;
+	mana = 100;
+	SDL_Rect temp2 = { 10, 70, mana*3, 10 };
+	mana_box = temp2;
 
 	//Weapons
 	ninja_star.damage = 4;
 	numNinjaStars = 0;
 
 	sword.damage = 6;
+
+	//Magic
+	SDL_Rect tempTornado = { 72, 176, 40, 40 };
+	tornadoClip = tempTornado;
+	magicIndex = 0;
+	magicCapacity = 4;
+	spells tempMagicArray[] = { FIRE, ICE, EARTH, WIND };
+	for (int i = 0; i < 4; i++)
+		magicArray[i] = tempMagicArray[i];
 }
 
 void Character::init(int x, int y)
@@ -563,6 +585,13 @@ void Character::load()
 	ninja_star_texture = loadImage("Media/Objects/ninjastar.png");
 	sword_texture = loadImage("Media/Objects/knife.png");
 	health_bar = loadImage("Media/Health.png");
+	mana_bar = loadImage("Media/Mana.png");
+	
+	//Magic
+	fire = loadImage("Media/Objects/fireball.png");
+	rock = loadImage("Media/Objects/rock.png");
+	ice = loadImage("Media/Objects/snowflake.png");
+	magic = loadImage("Media/Objects/magic_icons.png");
 }
 
 SDL_Texture* Character::loadImage(const char *filename)
@@ -645,6 +674,10 @@ void Character::handleInput(SDL_Event event)
 			if (event.key.repeat == 0)
 				actionCheck = true;
 			break;
+		case SDLK_f:
+			if (event.key.repeat == 0)
+				cast(10);
+			break;
         }
 	}
 	else if( event.type == SDL_KEYUP )
@@ -706,7 +739,22 @@ void Character::handleInput(SDL_Event event)
 			sword.init(sword_texture, box, flip);
 			swinging = true;
 			lastSwing = frame;
+		}
+	}
 
+	if (event.type == SDL_MOUSEWHEEL)
+	{
+		if (event.wheel.y > 0)
+		{
+			magicIndex++;
+			if (magicIndex > magicCapacity-1)
+				magicIndex = 0;
+		}
+		else if (event.wheel.y < 0)
+		{
+			magicIndex--;
+			if (magicIndex < 0)
+				magicIndex = magicCapacity-1;
 		}
 	}
 }
@@ -806,6 +854,7 @@ void Character::move()
 
 	//Health
 	health_box.w = health*3;
+	mana_box.w = mana*3;
 
 	//Ninja star
 	if (ninja_star.texture != NULL)
@@ -848,28 +897,8 @@ void Character::show(int x, int y)
 
 	SDL_Rect destination = { box.x - x, box.y - y, box.w, box.h };
 
-	
-	if (invulnerable && invulnerableTimeLeft > 0)
-	{
-		if (invulnerableTimeLeft % 5 == 0)
-			flashing = true;
-		else
-			flashing = false;
-
-		invulnerableTimeLeft--;
-
-	}
-	else
-	{
-		invulnerable = false;
-		flashing = false;
-	}
-
 	//LazyFoo** must pass in the renderer, texture, reference to the sprite (as a rectangle), and reference to the destination on the screen
-	if (flashing)
-		SDL_RenderCopy(renderer, NULL, &clip[currentClip], &destination);
-	else
-		SDL_RenderCopy(renderer, texture, &clip[currentClip], &destination);
+	SDL_RenderCopy(renderer, texture, &clip[currentClip], &destination);
 
 	if (swinging)
 		sword.draw();
@@ -922,10 +951,10 @@ void Character::checkCollision()
 						collision[BOTTOM] = true;
 					}
 				}
-				else if (CurrentLevel[index +1 +LevelWidth/40*row+(xvel*row)/40] != NULL)
+				else if (CurrentLevel[index +1 +LevelWidth/40*row+(xvel*row)/40] != NULL &&  index%(LevelWidth/40) != LevelWidth/40 - 1)
 				{
 					SDL_Rect tile = CurrentLevel[index +1 +LevelWidth/40*row+(xvel*row)/40]->getBox();
-					if (box.x + box.w > tile.x && CurrentLevel[index +1 +LevelWidth/40*row+(xvel*row)/40]->collidable())
+					if (box.x + box.w-5 > tile.x && CurrentLevel[index +1 +LevelWidth/40*row+(xvel*row)/40]->collidable())
 					{
 						ground_tile = tile;
 						collision[BOTTOM] = true;
@@ -996,25 +1025,40 @@ void Character::drawStats()
 	SDL_Texture* number = loadText("", numNinjaStars, gFont, &temp2);
 	SDL_RenderCopy(renderer, number, NULL, &temp2);
 
-	//Health
+	//Health/Mana
 	SDL_RenderCopy(renderer, health_bar, NULL, &health_box);
+	SDL_RenderCopy(renderer, mana_bar, NULL, &mana_box);
+
+	//Magic
+	if (magicCapacity > 0)
+	{
+		SDL_Rect magic_destination = { 60, 10, 30, 30 };
+		switch (magicArray[magicIndex])
+		{
+		case FIRE:
+			SDL_RenderCopy(renderer, fire, NULL, &magic_destination);
+			break;
+		case ICE:
+			SDL_RenderCopy(renderer, ice, NULL, &magic_destination);
+			break;
+		case EARTH:
+			SDL_RenderCopy(renderer, rock, NULL, &magic_destination);
+			break;
+		case WIND:
+			SDL_RenderCopy(renderer, magic, &tornadoClip, &magic_destination);
+			break;
+		}
+	}
 }
 
 void Character::damage(int amount)
 {
 	health -= amount;
-	invulnerable = true;
-	invulnerableTimeLeft = 90;
 }
 
-Sword Character::getSword()
+void Character::cast(int amount)
 {
-	return sword;
-}
-
-void Character::changeSwordState()
-{
-	sword.notDamagedYet = !sword.notDamagedYet;
+	mana -= amount;
 }
 #pragma endregion Character Class
 
@@ -1089,7 +1133,7 @@ SmallOrc::SmallOrc(SDL_Texture *texture, int x, int y)
 	box.h = idle_height;
 
 	this->texture = texture;
-	box.x = x - (box.w - 40);
+	box.x = x;
 	box.y = y - (box.h - 45);
 
 	currentClip = 0;
@@ -1246,6 +1290,7 @@ public:
 	void load();
 	void update();
 	void draw();
+	void deleteAll();
 };
 
 SDL_Texture* EnemyManager::loadImage(const char *filename)
@@ -1293,6 +1338,9 @@ void EnemyManager::update()
 		SDL_Rect enemy = small_orcs.at(i).getBox();
 		SmallOrc *orc = &small_orcs.at(i);
 
+		if (!cameraCollision(enemy))
+			continue;
+
 		//Move orc
 		if (((player.y + player.h < enemy.y + enemy.h && player.y + player.h > enemy.y) ||
 			(player.y < enemy.y + enemy.h && player.y > enemy.y)) &&
@@ -1323,6 +1371,14 @@ void EnemyManager::draw()
 	{
 		if (cameraCollision(small_orcs.at(i).getBox()))
 			small_orcs.at(i).draw();
+	}
+}
+
+void EnemyManager::deleteAll()
+{
+	for (int i = 0; i < small_orcs.size(); i++)
+	{
+		small_orcs.erase(small_orcs.begin() + i);
 	}
 }
 
@@ -1391,7 +1447,7 @@ void EnemyManager::collisionManager(SmallOrc* orc)
 	}
 		
 	//Damage with player
-	if (!Player.invulnerable && checkCollision(player, enemy))
+	if (checkCollision(player, enemy))
 	{
 		Player.damage(5);
 		if (Player.getYVel() > 0)
@@ -1403,7 +1459,8 @@ void EnemyManager::collisionManager(SmallOrc* orc)
 			Player.setYVel(-10);
 		}
 					
-		Player.setXVel(enemy.x < player.x ? 4 : -4);
+		Player.setXVel(enemy.x <= player.x ? 4 : -4);
+		printf("%d\n", Player.getXVel());
 
 		orc->setState(orc->RECOVER);
 
@@ -1426,40 +1483,27 @@ void EnemyManager::collisionManager(SmallOrc* orc)
 	SDL_Rect swordBox = Player.getSwordBox();
 	bool star = checkCollision(enemy, NJbox);
 	bool sword = checkCollision(enemy, swordBox);
-	Sword currentSword = Player.getSword();
 
-	if (star || sword)
+	if ( (star || sword) && orc->getState() != orc->RECOVER)
 	{
-		if (currentSword.notDamagedYet && sword)
+		orc->setState(orc->RECOVER);
+		if ((star && enemy.x < NJbox.x) || (sword && enemy.x < swordBox.x))
 		{
-			orc->setState(orc->RECOVER);
-			if ((star && enemy.x < NJbox.x) || (sword && enemy.x < swordBox.x))
-			{
-				if (!orc->collision[LEFT])
-					orc->box.x -= 10;
-				orc->aggroState = orc->RUNNING_RIGHT;
-			}
-			else
-			{
-				if (!orc->collision[RIGHT])
-					orc->box.x += 10;
-				orc->aggroState = orc->RUNNING_LEFT;
-			}
-				orc->health -= Player.swordDamage();
-			if (orc->health <= 0)
-				orc->setState(orc->DEAD);
-
-				Player.changeSwordState();
+			if (!orc->collision[LEFT])
+				orc->box.x -= 10;
+			orc->aggroState = orc->RUNNING_RIGHT;
 		}
+		else
+		{
+			if (!orc->collision[RIGHT])
+				orc->box.x += 10;
+			orc->aggroState = orc->RUNNING_LEFT;
+		}
+		Player.delNinjaStar();
 
-			Player.delNinjaStar();
-
-			if (star)
-				orc->health -= Player.ninjaStarDamage();
-
-			if (orc->health <= 0)
-				orc->setState(orc->DEAD);
-
+		orc->health -= (star ? Player.ninjaStarDamage() : Player.swordDamage());
+		if (orc->health <= 0)
+			orc->setState(orc->DEAD);
 	}
 }
 #pragma endregion EnemyManager Class
@@ -1792,6 +1836,7 @@ public:
 	void addAI(int x, int y, AI::types type);
 	void update();
 	void draw();
+	void deleteAll();
 };
 
 void AIManager::load()
@@ -1871,6 +1916,14 @@ void AIManager::draw()
 			bots.at(i).draw();
 	}
 }
+
+void AIManager::deleteAll()
+{
+	for (int i = 0; i < bots.size(); i++)
+	{
+		bots.erase(bots.begin() + i);
+	}
+}
 #pragma endregion AIManager Class
 
 //********** THE AI MANAGER ********
@@ -1878,6 +1931,7 @@ AIManager AIMang;
 #pragma endregion AI with Interaction
 
 //******************************************* END INTERACTION WITH AI **************************
+
 
 
 
@@ -1999,6 +2053,7 @@ public:
 	void addChest(int x, int y, int type);
 	void update();
 	void draw();
+	void deleteAll();
 };
 
 void TreasureChestManager::load()
@@ -2039,6 +2094,14 @@ void TreasureChestManager::draw()
 			treasure_chests.at(i).draw();
 	}
 }
+
+void TreasureChestManager::deleteAll()
+{
+	for (int i = 0; i < treasure_chests.size(); i++)
+	{
+		treasure_chests.erase(treasure_chests.begin() + i);
+	}
+}
 #pragma endregion TreasureChestManager Class
 
 //********** THE TREASURE CHEST MANAGER *************
@@ -2051,6 +2114,119 @@ TreasureChestManager TreasureChestMang;
 
 
 
+
+
+
+
+//***************************************** DOORWAYS ***********************************************
+
+#pragma region Door
+class Door
+{
+private:
+	SDL_Texture* texture;
+	SDL_Rect box;
+	SDL_Rect clip;
+	level_type level;
+
+public:
+	Door(int x, int y, SDL_Texture* texture, level_type level);
+	SDL_Rect getBox();
+	void update();
+	void draw();
+};
+
+Door::Door(int x, int y, SDL_Texture* texture, level_type level)
+{
+	SDL_Rect temp = { 0, 512, 128, 128 };
+	clip = temp;
+
+	box.x = x - 88;
+	box.y = y - 85;
+	box.w = 128;
+	box.h = 128;
+
+	this->texture = texture;
+	this->level = level;
+}
+
+SDL_Rect Door::getBox()
+{
+	return box;
+}
+
+void Door::update()
+{
+	if (checkCollision(box, Player.getBox()) && Player.checkAction())
+		current_level = level;
+}
+
+void Door::draw()
+{
+	SDL_Rect destination = { box.x - Camera.x, box.y - Camera.y, box.w, box.h };
+	SDL_RenderCopy(renderer, texture, &clip, &destination);
+}
+#pragma endregion Door Class
+
+#pragma region DoorManager
+class DoorManager
+{
+private:
+	std::vector<Door> doors;
+	SDL_Texture* texture;
+
+public:
+	void load();
+	void addDoor(int x, int y);
+	void update();
+	void draw();
+	void deleteAll();
+};
+
+void DoorManager::load()
+{
+	texture = loadImage("Media/Doorway.png");
+}
+
+void DoorManager::addDoor(int x, int y)
+{
+	doors.push_back(Door(x, y, texture, LEVEL_ONE));
+}
+
+void DoorManager::update()
+{
+	for (int i = 0; i < doors.size(); i++)
+		if (checkCollision(doors.at(i).getBox(), Camera))
+			doors.at(i).update();
+}
+
+void DoorManager::draw()
+{
+	for (int i = 0; i < doors.size(); i++)
+		if (checkCollision(doors.at(i).getBox(), Camera))
+			doors.at(i).draw();
+}
+
+void DoorManager::deleteAll()
+{
+	for (int i = 0; i < doors.size(); i++)
+	{
+		doors.erase(doors.begin() + i);
+	}
+}
+#pragma endregion DoorManager Class
+
+DoorManager DoorMang;
+
+//*************************************** END DOORWAYS **********************************************
+
+
+
+
+
+
+
+
 //*************************************************** LEVEL MANAGER ****************************************
 
 //Level Manager Class and Functions
@@ -2058,8 +2234,6 @@ TreasureChestManager TreasureChestMang;
 class LevelManager
 {
 public:
-	typedef enum { HOME_LEVEL, LEVEL_ONE } level_type;
-
 	typedef enum { NE1, NW1, SE1, SW1, NE2, NW2, SE2, SW2, NE3, NW3, SE3, SW3, NE4, NW4, SE4, SW4, NE5, NW5, SE5, SW5, //Walls
 		WE1, WW1, WE2, WW2, //Walkways
 		TN1, TS1, TN2, TS2, //Totems
@@ -2069,7 +2243,8 @@ public:
 		MCH, //Main Character
 		SOR, //Small Orc
 		WIZ, ROB, //AIs
-		TC1 //Treasure Chests
+		TC1, //Treasure Chests
+		DOR //Doorway
 	} textures;
 
 	void loadTextures();
@@ -2085,7 +2260,7 @@ private:
 	SDL_Rect *background;
 
 	//Level index
-	int current_level;
+	level_type prevLevel;
 	int current_height;
 	int current_width;
 
@@ -2252,7 +2427,14 @@ void LevelManager::initializeLevels()
 
 void LevelManager::loadLevel(level_type level)
 {
+	prevLevel = level;
 	current_level = level;
+
+	EnemyMang.deleteAll();
+	AIMang.deleteAll();
+	TreasureChestMang.deleteAll();
+	DoorMang.deleteAll();
+
 	switch (current_level)
 	{
 	case HOME_LEVEL:
@@ -2278,6 +2460,9 @@ void LevelManager::loadLevel(level_type level)
 		Background = levelone_level_background;
 		break;
 	}
+
+	Player.box.x = start_x;
+	Player.box.y = start_y;
 }
 
 void LevelManager::buildLevel(textures blueprint[], Tile *level_boxes[], int height, int width, int tex_width, int tex_height)
@@ -2285,7 +2470,7 @@ void LevelManager::buildLevel(textures blueprint[], Tile *level_boxes[], int hei
 	for (int i = 0; i < height*width; i++)
 	{
 		bool solid = true;
-		SDL_Texture *level = NULL;
+		SDL_Texture *level;
 
 		switch (blueprint[i])
 		{
@@ -2411,6 +2596,10 @@ void LevelManager::buildLevel(textures blueprint[], Tile *level_boxes[], int hei
 			level = NULL;
 			TreasureChestMang.addChest((i%width)*tex_width, (i/width)*tex_height, 1);
 			break;
+		case DOR:
+			level = NULL;
+			DoorMang.addDoor((i%width)*tex_width, (i/width)*tex_height);
+			break;
 		}
 
 		if (level == NULL)
@@ -2434,6 +2623,9 @@ void LevelManager::draw()
 			continue;
 		CurrentLevel[i]->draw(Camera, renderer);
 	}
+
+	if (prevLevel != current_level)
+		loadLevel(current_level);
 }
 
 void LevelManager::loadLevelFromText(std::string filename, level_type level)
@@ -2537,6 +2729,8 @@ LevelManager::textures LevelManager::stringToEnum(std::string enumString)
 		return ROB;
 	else if (enumString == "TC1")
 		return TC1;
+	else if (enumString == "DOR")
+		return DOR;
 	else
 		return NON;
 #pragma endregion Conversions
@@ -2547,7 +2741,6 @@ LevelManager::textures LevelManager::stringToEnum(std::string enumString)
 LevelManager LevelMang;
 
 //************************************************** END LEVEL MANAGER ***********************************
-
 
 
 
@@ -2600,13 +2793,14 @@ bool loadFiles()
 {
 	EnemyMang.load();
 	TreasureChestMang.load();
+	DoorMang.load();
 	AIMang.load();
 
 	LevelMang.loadTextures();
 	LevelMang.initializeLevels();
 
 	//Initialize to home level
-	LevelMang.loadLevel(LevelMang.LEVEL_ONE);
+	LevelMang.loadLevel(HOME_LEVEL);
 
 	Player.load();
 	Player.init(start_x, start_y);
@@ -2662,6 +2856,8 @@ void update()
 
 	AIMang.update();
 
+	DoorMang.update();
+
 	setCamera(Player.getBox(), LevelWidth, LevelHeight);
 
 	//Reset the player's actionCheck
@@ -2675,6 +2871,7 @@ void draw()
 	SDL_RenderCopy(renderer, screen, NULL, NULL);
 
 	LevelMang.draw();
+	DoorMang.draw();
 	TreasureChestMang.draw();
 	AIMang.draw();
 	Player.show(Camera.x, Camera.y);
