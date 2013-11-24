@@ -1,7 +1,6 @@
 #include "SDL.h"
 #include "SDL_image.h"
 #include "SDL_ttf.h"
-#include "SDL_mixer.h"
 #include "Timer.h"
 #include "Tile.h"
 #include <string>
@@ -13,7 +12,10 @@ using namespace std;
 
 ifstream input_file;
 
-typedef enum { PLAYING, AI_SPEAKING } GAME_STATES;
+//Main quit variable
+bool quit = false;
+
+typedef enum { PLAYING, AI_SPEAKING, PAUSE_MENU } GAME_STATES;
 GAME_STATES GAME_STATE = PLAYING;
 
 //Levels
@@ -40,17 +42,6 @@ TTF_Font *scriptFont = NULL;
 
 //TextBox
 SDL_Texture *textArea = NULL;
-
-//Music
-Mix_Music *music = NULL;
-
-//Sounds
-Mix_Chunk *door = NULL;
-Mix_Chunk *ogre = NULL;
-Mix_Chunk *swing = NULL;
-Mix_Chunk *clank = NULL;
-Mix_Chunk *chest = NULL;
-
 
 //Read the LazyFoo tutorials to better understand
 SDL_Window* window = NULL;
@@ -212,7 +203,6 @@ public:
 
 void NinjaStar::init(SDL_Texture* texture, SDL_Rect box, float xvel, float yvel)
 {
-	Mix_PlayChannel(-1, clank, 0);
 	this->texture = texture;
 	this->box = box;
 	this->xvel = xvel;
@@ -307,7 +297,6 @@ public:
 
 void Sword::init(SDL_Texture* texture, SDL_Rect box, SDL_RendererFlip flip)
 {
-    Mix_PlayChannel( -1, swing, 0); 
 	start = frame;
 	this->texture = texture;
 	this->flip = flip;
@@ -1150,7 +1139,7 @@ void Character::drawStats()
 	SDL_Rect temp = { 10, 10, 30, 30 };
 	SDL_RenderCopy(renderer, ninja_star_texture, NULL, &temp);
 	SDL_Rect temp2 = { 45, 50, 15, 15 };
-	SDL_Texture* number = loadText("", numNinjaStars, gFont, &temp2);
+	SDL_Texture* number = loadText("", numNinjaStars, scriptFont, &temp2);
 	SDL_RenderCopy(renderer, number, NULL, &temp2);
 
 	//Health/Mana
@@ -1405,6 +1394,14 @@ void Enemy::update()
 		}
 	}
 
+	if (state == JUMPING)
+	{
+		if (currentClip < 10 && frame-beginFrame%2 == 0)
+			currentClip++;
+		if (yvel >= 0)
+			falling = true;
+	}
+
 	if (falling)
 	{
 		yvel += Y_VELOCITY;
@@ -1457,6 +1454,8 @@ void Enemy::setState(states state)
 	beginFrame = frame;
 	if (state == STANDING_LEFT || state == STANDING_RIGHT || state == RECOVER)
 		currentClip = 0;
+	else if (state == JUMPING)
+		currentClip = 8;
 	else
 		currentClip = 4;
 
@@ -1783,7 +1782,7 @@ EnemyManager EnemyMang;
 
 
 
-//************************************ INTERACTION WITH AI **************************************************
+//************************************ INTERACTION WITH AI/MENUS **************************************************
 
 #pragma region AI
 //Button Class and Functions
@@ -1791,7 +1790,7 @@ EnemyManager EnemyMang;
 class Button
 {
 public:
-	typedef enum { SUBMENU, BUY_NINJA_STARS, BUY_POTIONS } types;
+	typedef enum { EXIT, RESUME } types;
 
 	Button(std::string STRING, types type);
 	void loadButton(int x, int y);
@@ -1819,12 +1818,12 @@ void Button::loadButton(int x, int y)
 	box.x = x;
 	box.y = y;
 
-	texture = loadText(STRING, -1, scriptFont, &box);
+	texture = loadText(STRING, -1, gFont, &box);
 }
 
 void Button::draw()
 {
-	SDL_Rect destination = { box.x - Camera.x, box.y - Camera.y, box.w, box.h };
+	SDL_Rect destination = { box.x, box.y, box.w, box.h };
 	SDL_RenderCopy(renderer, texture, NULL, &destination);
 }
 
@@ -1837,8 +1836,11 @@ void Button::action()
 {
 	switch (type)
 	{
-	case BUY_NINJA_STARS:
-		Player.addNinjaStars(5);
+	case EXIT:
+		quit = true;
+		break;
+	case RESUME:
+		GAME_STATE = PLAYING;
 		break;
 	}
 }
@@ -1906,6 +1908,12 @@ void Menu::draw()
 	}
 }
 #pragma endregion Menu Class
+
+//Pause Menu
+Menu PauseMenu;
+Button ExitButton("Exit", Button::EXIT);
+Button ResumeButton("Resume", Button::RESUME);
+
 
 //AI Class and Functions
 #pragma region AI
@@ -2110,10 +2118,6 @@ void AIManager::load()
 	wizard_texture = loadImage("Media/wizard.png");
 	robot_texture = loadImage("Media/robot.png");
 
-	//Menus and Buttons
-	Button buy_ninja_stars("Ninja Stars", Button::BUY_NINJA_STARS);
-	shop.addButton(buy_ninja_stars);
-
 	//Scripts
 	input_file.open("Media/Scripts/start_wizard.txt");
 	if (input_file.is_open())
@@ -2193,7 +2197,7 @@ void AIManager::deleteAll()
 AIManager AIMang;
 #pragma endregion AI with Interaction
 
-//******************************************* END INTERACTION WITH AI **************************
+//******************************************* END INTERACTION WITH AI/MENUS **************************
 
 
 
@@ -2269,7 +2273,6 @@ void TreasureChest::setState(states state)
 	this->state = state;
 	if (state == OPEN)
 	{
-		Mix_PlayChannel(-1, chest, 0);
 		opened = frame;
 		switch (type)
 		{
@@ -2422,10 +2425,7 @@ SDL_Rect Door::getBox()
 void Door::update()
 {
 	if (checkCollision(box, Player.getBox()) && Player.checkAction())
-	{	
-	    Mix_PlayChannel(-1, door, 0);
 		current_level = level;
-	}
 }
 
 void Door::draw()
@@ -2714,8 +2714,6 @@ void LevelManager::loadLevel(level_type level)
 		LevelHeight = home_level_height*home_texelh;
 		LevelSize = home_level_width*home_level_height;
 		Background = home_level_background;
-		music = Mix_LoadMUS( "Media/Music/home_level.wav" );
-		Mix_PlayMusic(music, -1);
 		break;
 	case LEVEL_ONE:
 		buildLevel(levelone_level_blueprint, levelone_level, levelone_level_height, levelone_level_width, levelone_texelw, levelone_texelh);
@@ -2727,8 +2725,6 @@ void LevelManager::loadLevel(level_type level)
 		LevelHeight = levelone_level_height*home_texelh;
 		LevelSize = levelone_level_width*home_level_height;
 		Background = levelone_level_background;
-		music = Mix_LoadMUS( "Media/Music/level_one.wav" );
-		Mix_PlayMusic(music, -1);
 		break;
 	}
 
@@ -3047,7 +3043,7 @@ bool init()
 	SDL_RenderSetLogicalSize(renderer, 640, 480);
 	SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
 
-	gFont = TTF_OpenFont( "Media/Fonts/alagard.ttf", 18 );
+	gFont = TTF_OpenFont( "Media/Fonts/alagard.ttf", 30 );
 	if( gFont == NULL )
 	{
 		printf( "Failed to load alagard font! SDL_ttf Error: %s\n", TTF_GetError() );
@@ -3061,8 +3057,6 @@ bool init()
 
 	if (window == NULL)
 		return false;
-    if(Mix_OpenAudio( 22050, MIX_DEFAULT_FORMAT, 2, 4096) == -1 )
-	    return false;
 
 	return true;
 }
@@ -3081,17 +3075,15 @@ bool loadFiles()
 	//Initialize to home level
 	LevelMang.loadLevel(HOME_LEVEL);
 
-	//load sounds
-    door = Mix_LoadWAV( "Media/Music/door.wav" );
-    ogre = Mix_LoadWAV( "Media/Music/ogre.wav" );
-    swing = Mix_LoadWAV( "Media/Music/swing.wav" );
-    clank = Mix_LoadWAV( "Media/Music/clank.wav" );
-	chest = Mix_LoadWAV("Media/Music/treasure.wav" );
-	
 	Player.load();
 	Player.init(start_x, start_y);
 
 	textArea = loadImage("Media/Fonts/textbox.png");
+
+	ExitButton.loadButton(SCREEN_WIDTH/2, SCREEN_HEIGHT/2 + 30);
+	ResumeButton.loadButton(SCREEN_WIDTH/2, SCREEN_HEIGHT/2 - 30);
+	PauseMenu.addButton(ExitButton);
+	PauseMenu.addButton(ResumeButton);
 
 	return true;
 }
@@ -3166,15 +3158,15 @@ void draw()
 	//Health is always last
 	Player.drawStats();
 
+	if (GAME_STATE == PAUSE_MENU)
+		PauseMenu.draw();
+
 	SDL_RenderPresent(renderer);
 }
 #pragma endregion Main Functions
 
 int main( int argc, char* args[] )
 {
-	//Main quit variable
-    bool quit = false;
-
 	//FPS
 	frame = 0;
 
@@ -3200,13 +3192,16 @@ int main( int argc, char* args[] )
 			case AI_SPEAKING:
 				SpeakingAI->handleInput(event);
 				break;
+			case PAUSE_MENU:
+				PauseMenu.update(event);
+				break;
 			}
 
 			//Quit options
 			if (event.type == SDL_KEYDOWN)
 			{
 				if (event.key.keysym.sym == SDLK_ESCAPE)
-					quit = true;
+					GAME_STATE = PAUSE_MENU;
 			}
 			if (event.type == SDL_QUIT) //X's out the window
 				quit = true;
