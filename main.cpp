@@ -1,6 +1,7 @@
 #include "SDL.h"
 #include "SDL_image.h"
 #include "SDL_ttf.h"
+#include "SDL_mixer.h"
 #include "Timer.h"
 #include "Tile.h"
 #include <string>
@@ -39,6 +40,17 @@ TTF_Font *scriptFont = NULL;
 
 //TextBox
 SDL_Texture *textArea = NULL;
+
+//Music
+Mix_Music *music = NULL;
+
+//Sounds
+Mix_Chunk *door = NULL;
+Mix_Chunk *ogre = NULL;
+Mix_Chunk *swing = NULL;
+Mix_Chunk *clank = NULL;
+Mix_Chunk *chest = NULL;
+
 
 //Read the LazyFoo tutorials to better understand
 SDL_Window* window = NULL;
@@ -200,6 +212,7 @@ public:
 
 void NinjaStar::init(SDL_Texture* texture, SDL_Rect box, float xvel, float yvel)
 {
+	Mix_PlayChannel(-1, clank, 0);
 	this->texture = texture;
 	this->box = box;
 	this->xvel = xvel;
@@ -294,6 +307,7 @@ public:
 
 void Sword::init(SDL_Texture* texture, SDL_Rect box, SDL_RendererFlip flip)
 {
+    Mix_PlayChannel( -1, swing, 0); 
 	start = frame;
 	this->texture = texture;
 	this->flip = flip;
@@ -2255,6 +2269,7 @@ void TreasureChest::setState(states state)
 	this->state = state;
 	if (state == OPEN)
 	{
+		Mix_PlayChannel(-1, chest, 0);
 		opened = frame;
 		switch (type)
 		{
@@ -2407,7 +2422,10 @@ SDL_Rect Door::getBox()
 void Door::update()
 {
 	if (checkCollision(box, Player.getBox()) && Player.checkAction())
+	{	
+	    Mix_PlayChannel(-1, door, 0);
 		current_level = level;
+	}
 }
 
 void Door::draw()
@@ -2696,6 +2714,8 @@ void LevelManager::loadLevel(level_type level)
 		LevelHeight = home_level_height*home_texelh;
 		LevelSize = home_level_width*home_level_height;
 		Background = home_level_background;
+		music = Mix_LoadMUS( "Media/Music/home_level.wav" );
+		Mix_PlayMusic(music, -1);
 		break;
 	case LEVEL_ONE:
 		buildLevel(levelone_level_blueprint, levelone_level, levelone_level_height, levelone_level_width, levelone_texelw, levelone_texelh);
@@ -2707,6 +2727,8 @@ void LevelManager::loadLevel(level_type level)
 		LevelHeight = levelone_level_height*home_texelh;
 		LevelSize = levelone_level_width*home_level_height;
 		Background = levelone_level_background;
+		music = Mix_LoadMUS( "Media/Music/level_one.wav" );
+		Mix_PlayMusic(music, -1);
 		break;
 	}
 
@@ -3039,6 +3061,8 @@ bool init()
 
 	if (window == NULL)
 		return false;
+    if(Mix_OpenAudio( 22050, MIX_DEFAULT_FORMAT, 2, 4096) == -1 )
+	    return false;
 
 	return true;
 }
@@ -3057,6 +3081,13 @@ bool loadFiles()
 	//Initialize to home level
 	LevelMang.loadLevel(HOME_LEVEL);
 
+	//load sounds
+    door = Mix_LoadWAV( "Media/Music/door.wav" );
+    ogre = Mix_LoadWAV( "Media/Music/ogre.wav" );
+    swing = Mix_LoadWAV( "Media/Music/swing.wav" );
+    clank = Mix_LoadWAV( "Media/Music/clank.wav" );
+	chest = Mix_LoadWAV("Media/Music/treasure.wav" );
+	
 	Player.load();
 	Player.init(start_x, start_y);
 
