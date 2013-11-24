@@ -192,6 +192,10 @@ public:
 	int angle;
 
 	int damage;
+
+	SDL_RendererFlip flip;
+
+	SDL_Rect* clip;
 };
 
 void NinjaStar::init(SDL_Texture* texture, SDL_Rect box, float xvel, float yvel)
@@ -201,6 +205,8 @@ void NinjaStar::init(SDL_Texture* texture, SDL_Rect box, float xvel, float yvel)
 	this->xvel = xvel;
 	this->yvel = yvel;
 	angle = 0;
+	flip = SDL_FLIP_NONE;
+	clip = NULL;
 }
 
 void NinjaStar::update()
@@ -215,8 +221,7 @@ void NinjaStar::update()
 void NinjaStar::draw()
 {
 	SDL_Rect destination = { box.x - Camera.x, box.y - Camera.y, box.w, box.h };
-	SDL_RendererFlip flip = SDL_FLIP_NONE;
-	SDL_RenderCopyEx(renderer, texture, NULL, &destination, angle, NULL, flip);
+	SDL_RenderCopyEx(renderer, texture, clip, &destination, angle, NULL, flip);
 }
 
 SDL_Rect NinjaStar::getBox()
@@ -224,6 +229,40 @@ SDL_Rect NinjaStar::getBox()
 	return box;
 }
 #pragma endregion NinjaStar Class
+
+//Spell Class
+#pragma region Spell
+class Spell : public NinjaStar
+{
+public:
+	typedef enum { FIRE, WIND, ICE, EARTH } spell_type;
+	void init(SDL_Texture* texture, int x, int y, float xvel, float yvel, SDL_RendererFlip flip, spell_type type, SDL_Rect* clip);
+	void update();
+
+	spell_type type;
+};
+
+void Spell::init(SDL_Texture* texture, int x, int y, float xvel, float yvel, SDL_RendererFlip flip, spell_type type, SDL_Rect* clip)
+{
+	this->texture = texture;
+	this->xvel = xvel;
+	this->yvel = yvel;
+	this->flip = flip;
+	this->type = type;
+	this->clip = clip;
+
+	SDL_Rect tempBox = { x, y, 30, 30 };
+	box = tempBox;
+
+	damage = 3;
+}
+
+void Spell::update()
+{
+	box.x += xvel;
+	box.y += yvel;
+}
+#pragma endregion Spell Class
 
 //Sword Class and Functinos
 #pragma region Sword
@@ -430,6 +469,7 @@ private:
 	bool running;
 	bool throwing;
 	bool swinging;
+	bool casting;
 	bool actionCheck;
 
 	//NinjaStar
@@ -448,6 +488,7 @@ private:
 	int magicCapacity;
 	typedef enum { FIRE, ICE, EARTH, WIND } spells;
 	spells magicArray[4];
+	Spell casted_spell;
 
 public:
 	Character(); //Constructor
@@ -459,7 +500,7 @@ public:
 
 	bool checkAction();
 	void resetActionCheck();
-	void checkCollision();
+	void movingCollision();
 	bool collision[3];
 
 	//Ninja star
@@ -472,6 +513,12 @@ public:
 	SDL_Rect getSwordBox();
 	void delSword();
 	int swordDamage();
+
+	//Spells
+	SDL_Rect getSpellBox();
+	void delSpell();
+	int spellDamage();
+	Spell::spell_type spellType();
 
 	//Health/Mana
 	void drawStats();
@@ -537,6 +584,7 @@ Character::Character()
 	running = false;
 	throwing = false;
 	swinging = false;
+	casting = false;
 	actionCheck = false;
 
 	//Health/Mana
@@ -675,8 +723,39 @@ void Character::handleInput(SDL_Event event)
 				actionCheck = true;
 			break;
 		case SDLK_f:
-			if (event.key.repeat == 0)
+			if (event.key.repeat == 0 && mana > 0 && !casting)
+			{
+				SDL_RendererFlip flip;
+				float xvel = 0;
+				if (direction == FACE_RIGHT)
+				{
+					xvel = 10;
+					flip = SDL_FLIP_NONE;
+				}
+				else
+				{
+					xvel = -10;
+					flip = SDL_FLIP_HORIZONTAL;
+				}
+
+				switch(magicArray[magicIndex])
+				{
+				case FIRE:
+					casted_spell.init(fire, box.x, box.y, xvel, 0, flip, Spell::FIRE, NULL);
+					break;
+				case ICE:
+					casted_spell.init(ice, box.x, box.y, xvel, 0, flip, Spell::ICE, NULL);
+					break;
+				case EARTH:
+					casted_spell.init(rock, box.x, box.y, xvel, 0, flip, Spell::EARTH, NULL);
+					break;
+				case WIND:
+					casted_spell.init(magic, box.x, box.y, xvel, 0, flip, Spell::WIND, &tornadoClip);
+					break;
+				}
 				cast(10);
+				casting = true;
+			}
 			break;
         }
 	}
@@ -866,6 +945,16 @@ void Character::move()
 		delNinjaStar();
 	}
 
+	//Spell
+	if (casting)
+		casted_spell.update();
+
+	if (!checkCollision(casted_spell.getBox(), Camera))
+	{
+		delSpell();
+		casting = false;
+	}
+
 	//Sword
 	SDL_RendererFlip flip = SDL_FLIP_NONE;
 	if (direction == FACE_RIGHT)
@@ -895,6 +984,9 @@ void Character::show(int x, int y)
 	if (ninja_star.texture != NULL)
 		ninja_star.draw();
 
+	if (casting)
+		casted_spell.draw();
+
 	SDL_Rect destination = { box.x - x, box.y - y, box.w, box.h };
 
 	//LazyFoo** must pass in the renderer, texture, reference to the sprite (as a rectangle), and reference to the destination on the screen
@@ -914,7 +1006,7 @@ void Character::resetActionCheck()
 	actionCheck = false;
 }
 
-void Character::checkCollision()
+void Character::movingCollision()
 {
 	int index = (box.y/40)*LevelWidth/40 + (box.x/40);
 	if (index >= LevelSize || index <= 0)
@@ -1016,6 +1108,28 @@ int Character::swordDamage()
 	return sword.damage;
 }
 
+SDL_Rect Character::getSpellBox()
+{
+	return casted_spell.box;
+}
+
+void Character::delSpell()
+{
+	casted_spell.texture = NULL;
+	casted_spell.box.x = Camera.x-100;
+	casted_spell.box.y = Camera.y-100;
+}
+
+int Character::spellDamage()
+{
+	return casted_spell.damage;
+}
+
+Spell::spell_type Character::spellType()
+{
+	return casted_spell.type;
+}
+
 void Character::drawStats()
 {
 	//NinjaStar
@@ -1066,14 +1180,18 @@ void Character::cast(int amount)
 Character Player;
 
 
-//SmallOrc Class and Functions
-#pragma region SmallOrc
-class SmallOrc : public Moveable
+//Enemy Class and Functions
+#pragma region Enemy
+class Enemy : public Moveable
 {
 public:
-	typedef enum { STANDING_LEFT, STANDING_RIGHT, RUNNING_LEFT, RUNNING_RIGHT, RECOVER, DEAD} states;
+	typedef enum { STANDING_LEFT, STANDING_RIGHT, RUNNING_LEFT, RUNNING_RIGHT, JUMPING, RECOVER, DEAD} states;
 	typedef enum { LEFT = 0, RIGHT, BOTTOM } sides;
-	SmallOrc(SDL_Texture* texture, int x, int y);
+	typedef enum { SMALL_ORC, GRIZZOLAR_BEAR, BIRD, LIZARD } types;
+
+	types type;
+
+	Enemy(SDL_Texture* texture, int x, int y, types type);
 	void update();
 	void draw();
 
@@ -1099,44 +1217,96 @@ private:
 	bool falling;
 };
 
-SmallOrc::SmallOrc(SDL_Texture *texture, int x, int y)
+Enemy::Enemy(SDL_Texture *texture, int x, int y, types type)
 {
-	state = STANDING_LEFT;
-	X_VELOCITY = 4;
-	Y_VELOCITY = 1;
-	MAX_Y_VELOCITY = 10;
+	this->type = type;
 
-	index = 1;
-	angle = 0;
-	health = 10;
-
-	int idle_width = 48, idle_height = 72;
-	int run_width = 64, run_height = 72;
-
-	for (int i = 0; i < 12; i++)
+	if (type == SMALL_ORC)
 	{
-		if (i < 4)
+		state = STANDING_LEFT;
+		X_VELOCITY = 4;
+		Y_VELOCITY = 1;
+		MAX_Y_VELOCITY = 10;
+	
+		index = 1;
+		angle = 0;
+		health = 10;
+	
+		int idle_width = 48, idle_height = 72;
+		int run_width = 64, run_height = 72;
+	
+		for (int i = 0; i < 12; i++)
 		{
-			clip[i].x = i%4*idle_width;
-			clip[i].y = 0;
-			clip[i].w = idle_width;
-			clip[i].h = idle_height;
-			continue;
+			if (i < 4)
+			{
+				clip[i].x = i%4*idle_width;
+				clip[i].y = 0;
+				clip[i].w = idle_width;
+				clip[i].h = idle_height;
+				continue;
+			}
+			clip[i].x = i%4*run_width;
+			clip[i].y = i/4*run_height;
+			clip[i].w = run_width;
+			clip[i].h = run_height;
 		}
-		clip[i].x = i%4*run_width;
-		clip[i].y = i/4*run_height;
-		clip[i].w = run_width;
-		clip[i].h = run_height;
+	
+		box.w = idle_width;
+		box.h = idle_height;
+
+		currentClip = 0;
 	}
+	else if (type == GRIZZOLAR_BEAR)
+	{
+		state = STANDING_LEFT;
+		X_VELOCITY = 5;
+		Y_VELOCITY = 1;
+		MAX_Y_VELOCITY = 10;
 
-	box.w = idle_width;
-	box.h = idle_height;
+		index = 1;
+		angle = 0;
+		health = 10;
+	
+		int idle_width = 56, idle_height = 64;
+		int run_width = 42, run_height = 64;
+		int jump_width = 56, jump_height = 64;
+		int standing_gap = 16, running_gap = 46, jumping_gap = 40;
+	
+		for (int i = 0; i < 12; i++)
+		{
+			if (i < 4)
+			{
+				clip[i].x = i%4*(idle_width+standing_gap)+standing_gap;
+				clip[i].y = 120;
+				clip[i].w = idle_width;
+				clip[i].h = idle_height;
+				continue;
+			}
+			else if (i < 8)
+			{
+				clip[i].x = i%4*(run_width+running_gap) + 24;
+				clip[i].y = 200;
+				clip[i].w = run_width;
+				clip[i].h = run_height;
+			}
+			else
+			{
+				clip[i].x = i%4*(jump_width*jumping_gap) + 24;
+				clip[i].y = 472;
+				clip[i].w = jump_width;
+				clip[i].h = jump_height;
+			}
+		}
+	
+		box.w = idle_width;
+		box.h = idle_height;
 
+		currentClip = 0;
+	}
+	
 	this->texture = texture;
 	box.x = x;
 	box.y = y - (box.h - 45);
-
-	currentClip = 0;
 
 	xvel = 0;
 	yvel = 0;
@@ -1150,7 +1320,7 @@ SmallOrc::SmallOrc(SDL_Texture *texture, int x, int y)
 	falling = false;
 }
 
-void SmallOrc::update()
+void Enemy::update()
 {
 	
 	if (state == STANDING_LEFT || state == STANDING_RIGHT || state == RECOVER)
@@ -1172,12 +1342,25 @@ void SmallOrc::update()
 
 	if (state == RUNNING_LEFT || state == RUNNING_RIGHT)
 	{
-		if ((frame-beginFrame)%4 == 0)
-			currentClip++;
-		
-		if (currentClip > 11)
-			currentClip = 4;
+		switch (type)
+		{
+		case SMALL_ORC:		
+			if ((frame-beginFrame)%4 == 0)
+				currentClip++;
 
+			if (currentClip > 11)
+				currentClip = 4;
+			break;
+		case GRIZZOLAR_BEAR:
+			if ((frame-beginFrame)%4 == 0)
+				currentClip += index;
+
+			if (currentClip > 7 || currentClip < 4)
+			{
+				index *= -1;
+				currentClip += index;
+			}
+		}
 		if (state == RUNNING_LEFT)
 		{
 			xvel = -X_VELOCITY;
@@ -1245,13 +1428,13 @@ void SmallOrc::update()
 		falling = true;
 }
 
-void SmallOrc::draw()
+void Enemy::draw()
 {
 	SDL_Rect destination = { box.x - Camera.x, box.y - Camera.y, box.w, box.h };
 	SDL_RenderCopyEx(renderer, texture, &clip[currentClip], &destination, angle, NULL, flip);
 }
 
-void SmallOrc::setState(states state)
+void Enemy::setState(states state)
 {
 	if (this->state == DEAD)
 		return;
@@ -1267,11 +1450,11 @@ void SmallOrc::setState(states state)
 		yvel = Y_VELOCITY;
 }
 
-int SmallOrc::getState()
+int Enemy::getState()
 {
 	return state;
 }
-#pragma endregion Small Orc Class
+#pragma endregion Enemy Class
 
 
 //EnemyManager Class and Functions
@@ -1279,14 +1462,20 @@ int SmallOrc::getState()
 class EnemyManager
 {
 private:
+	//Enemy textures
 	SDL_Texture* small_orc_texture;
+	SDL_Texture* grizzolar_bear_texture;
+	SDL_Texture* bird_texture;
+	SDL_Texture* lizzard_texture;
+
 	SDL_Texture* loadImage(const char *filename);
-	std::vector<SmallOrc> small_orcs;
+	std::vector<Enemy> enemies;
 	bool cameraCollision(SDL_Rect box);
-	void collisionManager(SmallOrc *orc);
+	void collisionManager(Enemy *enemy);
+	bool checkWeak(Enemy::types enemy, Spell::spell_type spell);
 
 public:
-	void addSmallOrc(int x, int y);
+	void addEnemy(int x, int y, Enemy::types type);
 	void load();
 	void update();
 	void draw();
@@ -1323,62 +1512,93 @@ SDL_Texture* EnemyManager::loadImage(const char *filename)
 void EnemyManager::load()
 {
 	small_orc_texture = loadImage("Media/Enemies/Small Orc.png");
+	grizzolar_bear_texture = loadImage("Media/Enemies/Grizzolar Bear.png");
 }
 
-void EnemyManager::addSmallOrc(int x, int y)
+void EnemyManager::addEnemy(int x, int y, Enemy::types type)
 {
-	small_orcs.push_back(SmallOrc(small_orc_texture, x, y));
+	SDL_Texture *texture = NULL;
+
+	switch (type)
+	{
+	case Enemy::SMALL_ORC:
+		texture = small_orc_texture;
+		break;
+	case Enemy::GRIZZOLAR_BEAR:
+		texture = grizzolar_bear_texture;
+		break;
+	}
+
+	enemies.push_back(Enemy(texture, x, y, type));
 }
 
 void EnemyManager::update()
 {
-	for (int i = 0; i < small_orcs.size(); i++)
+	for (int i = 0; i < enemies.size(); i++)
 	{
 		SDL_Rect player = Player.getBox();
-		SDL_Rect enemy = small_orcs.at(i).getBox();
-		SmallOrc *orc = &small_orcs.at(i);
+		SDL_Rect enemy_box = enemies.at(i).getBox();
+		Enemy *enemy = &enemies.at(i);
 
-		if (!cameraCollision(enemy))
+		if (!cameraCollision(enemy_box))
 			continue;
 
-		//Move orc
-		if (((player.y + player.h < enemy.y + enemy.h && player.y + player.h > enemy.y) ||
-			(player.y < enemy.y + enemy.h && player.y > enemy.y)) &&
-			(orc->getState() == orc->STANDING_LEFT || orc->getState() == orc->STANDING_RIGHT))
+		//Move enemies
+		switch (enemy->type)
 		{
-			int delta_x = player.x - enemy.x;
-
-			if (delta_x < 200 && delta_x > 0 && orc->getState() != orc->RECOVER)
-				orc->setState(orc->RUNNING_RIGHT);
-			else if (delta_x > -200 && delta_x < 0 && orc->getState() != orc->RECOVER)
-				orc->setState(orc->RUNNING_LEFT);
+		case Enemy::SMALL_ORC:
+			if (((player.y + player.h < enemy_box.y + enemy_box.h && player.y + player.h > enemy_box.y) ||
+				(player.y < enemy_box.y + enemy_box.h && player.y > enemy_box.y)) &&
+				(enemy->getState() == Enemy::STANDING_LEFT || enemy->getState() == Enemy::STANDING_RIGHT))
+			{
+				int delta_x = player.x - enemy_box.x;
+	
+				if (delta_x < 200 && delta_x > 0 && enemy->getState() != Enemy::RECOVER)
+					enemy->setState(Enemy::RUNNING_RIGHT);
+				else if (delta_x > -200 && delta_x < 0 && enemy->getState() != Enemy::RECOVER)
+					enemy->setState(Enemy::RUNNING_LEFT);
+			}
+			break;
+		case Enemy::GRIZZOLAR_BEAR:
+			if (((player.y + player.h < enemy_box.y + enemy_box.h && player.y + player.h > enemy_box.y) ||
+				(player.y < enemy_box.y + enemy_box.h && player.y > enemy_box.y)) &&
+				(enemy->getState() == Enemy::STANDING_LEFT || enemy->getState() == Enemy::STANDING_RIGHT))
+			{
+				int delta_x = player.x - enemy_box.x;
+	
+				if (delta_x < 300 && delta_x > 0 && enemy->getState() != Enemy::RECOVER)
+					enemy->setState(Enemy::RUNNING_RIGHT);
+				else if (delta_x > -300 && delta_x < 0 && enemy->getState() != Enemy::RECOVER)
+					enemy->setState(Enemy::RUNNING_LEFT);
+			}
+			break;
 		}
 
-		collisionManager(orc);
+		collisionManager(enemy);
 
 		//Update
-		if (cameraCollision(enemy))
-			orc->update();
+		if (cameraCollision(enemy_box))
+			enemy->update();
 
-		if (orc->getState() == orc->DEAD && !cameraCollision(enemy))
-			small_orcs.erase(small_orcs.begin() + i);
+		if (enemy->getState() == Enemy::DEAD && !cameraCollision(enemy_box))
+			enemies.erase(enemies.begin() + i);
 	}
 }
 
 void EnemyManager::draw()
 {
-	for (int i = 0; i < small_orcs.size(); i++)
+	for (int i = 0; i < enemies.size(); i++)
 	{
-		if (cameraCollision(small_orcs.at(i).getBox()))
-			small_orcs.at(i).draw();
+		if (cameraCollision(enemies.at(i).getBox()))
+			enemies.at(i).draw();
 	}
 }
 
 void EnemyManager::deleteAll()
 {
-	for (int i = 0; i < small_orcs.size(); i++)
+	for (int i = 0; i < enemies.size(); i++)
 	{
-		small_orcs.erase(small_orcs.begin() + i);
+		enemies.erase(enemies.begin());
 	}
 }
 
@@ -1400,46 +1620,46 @@ bool EnemyManager::cameraCollision(SDL_Rect box)
 	return true;
 }
 
-void EnemyManager::collisionManager(SmallOrc* orc)
+void EnemyManager::collisionManager(Enemy* enemy)
 {
-	if (orc->getState() == orc->DEAD)
+	if (enemy->getState() == Enemy::DEAD)
 		return;
 
-	SDL_Rect enemy = orc->getBox();
+	SDL_Rect enemy_box = enemy->getBox();
 	SDL_Rect player = Player.getBox();
 
 	//Check collision for orc
-	int index = (enemy.y/40)*LevelWidth/40 + (enemy.x/40);
+	int index = (enemy_box.y/40)*LevelWidth/40 + (enemy_box.x/40);
 	if (index >= LevelSize)
 	{
-		orc->collision[orc->LEFT] = false;
-		orc->collision[orc->RIGHT] = false;
+		enemy->collision[Enemy::LEFT] = false;
+		enemy->collision[Enemy::RIGHT] = false;
 	}
 	else 
 	{
 		if (CurrentLevel[index] == NULL)
-			orc->collision[orc->LEFT] = false;
+			enemy->collision[Enemy::LEFT] = false;
 		else
-			orc->collision[orc->LEFT] = CurrentLevel[index]->collidable();
+			enemy->collision[Enemy::LEFT] = CurrentLevel[index]->collidable();
 					
 		if (CurrentLevel[index+1] == NULL)
-			orc->collision[orc->RIGHT] = false;
+			enemy->collision[Enemy::RIGHT] = false;
 		else
-			orc->collision[orc->RIGHT] = CurrentLevel[index+1]->collidable();
+			enemy->collision[Enemy::RIGHT] = CurrentLevel[index+1]->collidable();
 
-		orc->collision[BOTTOM] = false;
-		if (orc->getYVel() < 0)
-			orc->collision[BOTTOM] = false;
+		enemy->collision[BOTTOM] = false;
+		if (enemy->getYVel() < 0)
+			enemy->collision[BOTTOM] = false;
 		else
 		{
 			int row = 1;
-			while (index+LevelWidth/40*row+(orc->getXVel()*row)/40 < LevelSize && orc->collision[BOTTOM] == false)
+			while (index+LevelWidth/40*row+(enemy->getXVel()*row)/40 < LevelSize && enemy->collision[BOTTOM] == false)
 			{
-				if (CurrentLevel[index+LevelWidth/40*row+(orc->getXVel()*row)/40] != NULL &&
-					CurrentLevel[index+LevelWidth/40*row+(orc->getXVel()*row)/40]->collidable())
+				if (CurrentLevel[index+LevelWidth/40*row+(enemy->getXVel()*row)/40] != NULL &&
+					CurrentLevel[index+LevelWidth/40*row+(enemy->getXVel()*row)/40]->collidable())
 				{
-					orc->ground_tile = CurrentLevel[index+LevelWidth/40*row+(orc->getXVel()*row)/40]->getBox();
-					orc->collision[BOTTOM] = true;
+					enemy->ground_tile = CurrentLevel[index+LevelWidth/40*row+(enemy->getXVel()*row)/40]->getBox();
+					enemy->collision[BOTTOM] = true;
 				}
 				row++;
 			}
@@ -1447,7 +1667,7 @@ void EnemyManager::collisionManager(SmallOrc* orc)
 	}
 		
 	//Damage with player
-	if (checkCollision(player, enemy))
+	if (checkCollision(player, enemy_box))
 	{
 		Player.damage(5);
 		if (Player.getYVel() > 0)
@@ -1459,52 +1679,81 @@ void EnemyManager::collisionManager(SmallOrc* orc)
 			Player.setYVel(-10);
 		}
 					
-		Player.setXVel(enemy.x <= player.x ? 4 : -4);
-		printf("%d\n", Player.getXVel());
+		Player.setXVel(enemy_box.x <= player.x ? 4 : -4);
 
-		orc->setState(orc->RECOVER);
+		enemy->setState(Enemy::RECOVER);
 
-		if (enemy.x < player.x)
+		if (enemy_box.x < player.x)
 		{
-			if (!orc->collision[LEFT])
-				orc->box.x -= 10;
-			orc->aggroState = orc->RUNNING_RIGHT;
+			if (!enemy->collision[LEFT])
+				enemy->box.x -= 10;
+			enemy->aggroState = Enemy::RUNNING_RIGHT;
 		}
 		else
 		{
-			if (!orc->collision[RIGHT])
-				orc->box.x += 10;
-			orc->aggroState = orc->RUNNING_LEFT;
+			if (!enemy->collision[RIGHT])
+				enemy->box.x += 10;
+			enemy->aggroState = Enemy::RUNNING_LEFT;
 		}
 	}
 
-	//Damage with ninja star
+	//Damage from player
 	SDL_Rect NJbox = Player.getNinjaStarBox();
 	SDL_Rect swordBox = Player.getSwordBox();
-	bool star = checkCollision(enemy, NJbox);
-	bool sword = checkCollision(enemy, swordBox);
+	SDL_Rect spellBox = Player.getSpellBox();
+	bool star = checkCollision(enemy_box, NJbox);
+	bool sword = checkCollision(enemy_box, swordBox);
+	bool spell = checkCollision(enemy_box, spellBox);
 
-	if ( (star || sword) && orc->getState() != orc->RECOVER)
+	if ( (star || sword || spell) && enemy->getState() != Enemy::RECOVER)
 	{
-		orc->setState(orc->RECOVER);
-		if ((star && enemy.x < NJbox.x) || (sword && enemy.x < swordBox.x))
+		enemy->setState(Enemy::RECOVER);
+		if ((star && enemy_box.x < NJbox.x) || (sword && enemy_box.x < swordBox.x) || (spell && enemy_box.x < spellBox.x))
 		{
-			if (!orc->collision[LEFT])
-				orc->box.x -= 10;
-			orc->aggroState = orc->RUNNING_RIGHT;
+			if (!enemy->collision[LEFT])
+				enemy->box.x -= 10;
+			enemy->aggroState = Enemy::RUNNING_RIGHT;
 		}
 		else
 		{
-			if (!orc->collision[RIGHT])
-				orc->box.x += 10;
-			orc->aggroState = orc->RUNNING_LEFT;
+			if (!enemy->collision[RIGHT])
+				enemy->box.x += 10;
+			enemy->aggroState = Enemy::RUNNING_LEFT;
 		}
 		Player.delNinjaStar();
-
-		orc->health -= (star ? Player.ninjaStarDamage() : Player.swordDamage());
-		if (orc->health <= 0)
-			orc->setState(orc->DEAD);
+		Player.delSpell();
+		
+		if (star)
+			enemy->health -= Player.ninjaStarDamage();
+		else if (sword)
+			enemy->health -= Player.swordDamage();
+		else if (spell)
+		{
+			if (checkWeak(enemy->type, Player.spellType()))
+				enemy->health -= 2*Player.spellDamage();
+			else
+				enemy->health -= Player.spellDamage();
+		}
+		if (enemy->health <= 0)
+			enemy->setState(Enemy::DEAD);
 	}
+}
+
+bool EnemyManager::checkWeak(Enemy::types enemy, Spell::spell_type spell)
+{
+	switch (enemy)
+	{
+	case Enemy::SMALL_ORC:
+		if (spell == Spell::FIRE)
+			return true;
+		break;
+	case Enemy::GRIZZOLAR_BEAR:
+		if (spell == Spell::WIND)
+			return true;
+		break;
+	}
+
+	return false;
 }
 #pragma endregion EnemyManager Class
 
@@ -2241,7 +2490,7 @@ public:
 		NON, //No texture
 
 		MCH, //Main Character
-		SOR, //Small Orc
+		SOR, GOB, //Enemies
 		WIZ, ROB, //AIs
 		TC1, //Treasure Chests
 		DOR //Doorway
@@ -2582,7 +2831,11 @@ void LevelManager::buildLevel(textures blueprint[], Tile *level_boxes[], int hei
 			break;
 		case SOR:
 			level = NULL;
-			EnemyMang.addSmallOrc((i%width)*tex_width, (i/width)*tex_height);
+			EnemyMang.addEnemy((i%width)*tex_width, (i/width)*tex_height, Enemy::SMALL_ORC);
+			break;
+		case GOB:
+			level = NULL;
+			EnemyMang.addEnemy((i%width)*tex_width, (i/width)*tex_height, Enemy::GRIZZOLAR_BEAR);
 			break;
 		case WIZ:
 			level = NULL;
@@ -2723,6 +2976,8 @@ LevelManager::textures LevelManager::stringToEnum(std::string enumString)
 		return MCH;
 	else if (enumString == "SOR")
 		return SOR;
+	else if (enumString == "GOB")
+		return GOB;
 	else if (enumString == "WIZ")
 		return WIZ;
 	else if (enumString == "ROB")
@@ -2841,7 +3096,7 @@ void cleanUp()
 
 void collisionManager()
 {
-	Player.checkCollision();
+	Player.movingCollision();
 }
 
 void update()
