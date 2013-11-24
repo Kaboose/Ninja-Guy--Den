@@ -10,7 +10,9 @@
 
 using namespace std;
 
-ifstream input_file;
+ifstream input_file; //scripts
+ifstream load_game;
+ofstream save_game;
 
 //Main quit variable
 bool quit = false;
@@ -500,6 +502,8 @@ public:
 	void move(); //Moves the character
 	void handleInput(SDL_Event event); //Handles the input
 	void show(int x, int y); //Draws the character on the screen
+
+	void save();
 
 	bool checkAction();
 	void resetActionCheck();
@@ -1001,6 +1005,13 @@ void Character::show(int x, int y)
 		sword.draw();
 }
 
+void Character::save()
+{
+	save_game << magicCapacity << "\n";
+	for (int i = 0; i < magicCapacity; i++)
+		save_game << magicArray[i] << "\n";
+}
+
 bool Character::checkAction()
 {
 	return actionCheck;
@@ -1210,6 +1221,10 @@ public:
 	void update();
 	void draw();
 
+	SDL_Rect getFireBox();
+	int getFireDamage();
+	void delFireball();
+
 	void setState(states state);
 	int getState();
 
@@ -1224,12 +1239,16 @@ private:
 	int angle;
 
 	SDL_Texture* texture;
+	SDL_Texture* fire;
+	Spell fireball;
 	SDL_Rect clip[12];
 	int currentClip;
 	int index;
 	int beginFrame;
+	int lastFired;
 
 	bool falling;
+	bool firing;
 };
 
 Enemy::Enemy(SDL_Texture *texture, int x, int y, types type)
@@ -1268,6 +1287,7 @@ Enemy::Enemy(SDL_Texture *texture, int x, int y, types type)
 	
 		box.w = idle_width;
 		box.h = idle_height;
+		box.y = y - (box.h - 45);
 
 		currentClip = 0;
 	}
@@ -1315,13 +1335,42 @@ Enemy::Enemy(SDL_Texture *texture, int x, int y, types type)
 	
 		box.w = idle_width;
 		box.h = idle_height;
+		box.y = y - (box.h - 45);
 
 		currentClip = 0;
+	}
+	else if (type == LIZARD)
+	{
+		state = STANDING_LEFT;
+		X_VELOCITY = 2;
+		Y_VELOCITY = 1;
+		MAX_Y_VELOCITY = 10;
+	
+		index = 1;
+		angle = 0;
+		health = 10;
+	
+		int idle_width = 32, idle_height = 32;
+	
+		for (int i = 0; i < 3; i++)
+		{
+			clip[i].x = i%3*idle_width;
+			clip[i].y = 64;
+			clip[i].w = idle_width;
+			clip[i].h = idle_height;
+		}
+	
+		box.w = 50;
+		box.h = 50;
+		box.y = y-10;
+
+		currentClip = 1;
+
+		fire = loadImage("Media/Objects/fireball.png");
 	}
 	
 	this->texture = texture;
 	box.x = x;
-	box.y = y - (box.h - 45);
 
 	xvel = 0;
 	yvel = 0;
@@ -1333,26 +1382,36 @@ Enemy::Enemy(SDL_Texture *texture, int x, int y, types type)
 	ground_tile.h = 40;
 
 	falling = false;
+	firing = false;
 }
 
 void Enemy::update()
 {
-	
 	if (state == STANDING_LEFT || state == STANDING_RIGHT || state == RECOVER)
 	{
-		if ((frame-beginFrame) % 6 == 0)
-			currentClip += index;
-
-		if (currentClip > 3 || currentClip < 0)
+		if (type == GRIZZOLAR_BEAR || type == SMALL_ORC)
 		{
-			index *= -1;
-			currentClip += index;
+			if ((frame-beginFrame) % 6 == 0)
+				currentClip += index;
+
+			if (currentClip > 3 || currentClip < 0)
+			{
+				index *= -1;
+				currentClip += index;
+			}
+	
+			xvel = 0;
+	
+			if (state == RECOVER && (frame-beginFrame+1)%75 == 0)
+				setState(aggroState);
 		}
 
-		xvel = 0;
-
-		if (state == RECOVER && (frame-beginFrame+1)%75 == 0)
-			setState(aggroState);
+		if (type == LIZARD)
+		{
+			xvel = 0;
+			if (state == RECOVER && (frame-beginFrame+1)%75 == 0)
+				setState(aggroState);
+		}
 	}
 
 	if (state == RUNNING_LEFT || state == RUNNING_RIGHT)
@@ -1375,6 +1434,26 @@ void Enemy::update()
 				index *= -1;
 				currentClip += index;
 			}
+			break;
+		case LIZARD:
+			if ((frame-beginFrame)%4 == 0)
+				currentClip += index;
+
+			if (currentClip < 0 || currentClip > 2)
+			{
+				index *= -1;
+				currentClip += index;
+			}
+
+			if (!firing && (frame+1 - beginFrame)%60 == 0)
+			{
+				int speed;
+				(state == RUNNING_LEFT ? speed = -10 : speed = 10);
+				fireball.init(fire, box.x, box.y, speed, 0, flip, Spell::FIRE, NULL);
+				lastFired = frame;
+				firing = true;
+			}
+			break;
 		}
 		if (state == RUNNING_LEFT)
 		{
@@ -1395,13 +1474,11 @@ void Enemy::update()
 
 		if (collision[LEFT] && state == RUNNING_LEFT)
 		{
-			xvel = 0;
 			setState(STANDING_LEFT);
 		}
 
 		if (collision[RIGHT] && state == RUNNING_RIGHT)
 		{
-			xvel = 0;
 			setState(STANDING_RIGHT);
 		}
 	}
@@ -1430,6 +1507,13 @@ void Enemy::update()
 		}
 	}
 
+	if (firing)
+	{
+		fireball.update();
+		if ((frame+1 - lastFired)%150 == 0)
+			firing = false;
+	}
+
 	if (state == DEAD)
 	{
 		yvel += 1;
@@ -1441,8 +1525,11 @@ void Enemy::update()
 	else
 		flip = SDL_FLIP_NONE;
 
-	box.w = clip[currentClip].w;
-	box.h = clip[currentClip].h;
+	if (type != LIZARD)
+	{
+		box.w = clip[currentClip].w;
+		box.h = clip[currentClip].h;
+	}
 
 	box.x += xvel;
 	box.y += yvel;
@@ -1455,6 +1542,27 @@ void Enemy::draw()
 {
 	SDL_Rect destination = { box.x - Camera.x, box.y - Camera.y, box.w, box.h };
 	SDL_RenderCopyEx(renderer, texture, &clip[currentClip], &destination, angle, NULL, flip);
+
+	if (firing)
+		fireball.draw();
+}
+
+SDL_Rect Enemy::getFireBox()
+{
+	return fireball.getBox();
+}
+
+int Enemy::getFireDamage()
+{
+	return fireball.damage;
+}
+
+void Enemy::delFireball()
+{
+	firing = false;
+	fireball.texture = NULL;
+	fireball.box.x = Camera.x-100;
+	fireball.box.y = Camera.y-100;
 }
 
 void Enemy::setState(states state)
@@ -1465,11 +1573,25 @@ void Enemy::setState(states state)
 	this->state = state;
 	beginFrame = frame;
 	if (state == STANDING_LEFT || state == STANDING_RIGHT || state == RECOVER)
-		currentClip = 0;
+	{
+		if (type == SMALL_ORC || type == GRIZZOLAR_BEAR)
+			currentClip = 0;
+		
+		if (type == LIZARD)
+			currentClip = 1;
+
+		xvel = 0;
+	}
 	else if (state == JUMPING)
 		currentClip = 8;
 	else
-		currentClip = 4;
+	{
+		if (type == SMALL_ORC || type == GRIZZOLAR_BEAR)
+			currentClip = 4;
+		
+		if (type == LIZARD)
+			currentClip = 1;
+	}
 
 	if (state == DEAD)
 		yvel = Y_VELOCITY;
@@ -1491,7 +1613,9 @@ private:
 	SDL_Texture* small_orc_texture;
 	SDL_Texture* grizzolar_bear_texture;
 	SDL_Texture* bird_texture;
-	SDL_Texture* lizzard_texture;
+	SDL_Texture* lizard_texture;
+
+	SDL_Texture* fire;
 
 	SDL_Texture* loadImage(const char *filename);
 	std::vector<Enemy> enemies;
@@ -1538,6 +1662,9 @@ void EnemyManager::load()
 {
 	small_orc_texture = loadImage("Media/Enemies/Small Orc.png");
 	grizzolar_bear_texture = loadImage("Media/Enemies/Grizzolar Bear.png");
+	lizard_texture = loadImage("Media/Enemies/Lizard.png");
+
+	fire = loadImage("Media/Objects/fireball.png");
 }
 
 void EnemyManager::addEnemy(int x, int y, Enemy::types type)
@@ -1551,6 +1678,9 @@ void EnemyManager::addEnemy(int x, int y, Enemy::types type)
 		break;
 	case Enemy::GRIZZOLAR_BEAR:
 		texture = grizzolar_bear_texture;
+		break;
+	case Enemy::LIZARD:
+		texture = lizard_texture;
 		break;
 	}
 
@@ -1585,6 +1715,19 @@ void EnemyManager::update()
 			}
 			break;
 		case Enemy::GRIZZOLAR_BEAR:
+			if (((player.y + player.h < enemy_box.y + enemy_box.h && player.y + player.h > enemy_box.y) ||
+				(player.y < enemy_box.y + enemy_box.h && player.y > enemy_box.y)) &&
+				(enemy->getState() == Enemy::STANDING_LEFT || enemy->getState() == Enemy::STANDING_RIGHT))
+			{
+				int delta_x = player.x - enemy_box.x;
+	
+				if (delta_x < 300 && delta_x > 0 && enemy->getState() != Enemy::RECOVER)
+					enemy->setState(Enemy::RUNNING_RIGHT);
+				else if (delta_x > -300 && delta_x < 0 && enemy->getState() != Enemy::RECOVER)
+					enemy->setState(Enemy::RUNNING_LEFT);
+			}
+			break;
+		case Enemy::LIZARD:
 			if (((player.y + player.h < enemy_box.y + enemy_box.h && player.y + player.h > enemy_box.y) ||
 				(player.y < enemy_box.y + enemy_box.h && player.y > enemy_box.y)) &&
 				(enemy->getState() == Enemy::STANDING_LEFT || enemy->getState() == Enemy::STANDING_RIGHT))
@@ -1691,7 +1834,7 @@ void EnemyManager::collisionManager(Enemy* enemy)
 		}
 	}
 		
-	//Damage with player
+	//Damage to player
 	if (checkCollision(player, enemy_box))
 	{
 		Player.damage(5);
@@ -1719,6 +1862,15 @@ void EnemyManager::collisionManager(Enemy* enemy)
 			if (!enemy->collision[RIGHT])
 				enemy->box.x += 10;
 			enemy->aggroState = Enemy::RUNNING_LEFT;
+		}
+	}
+
+	if (enemy->type == Enemy::LIZARD)
+	{
+		if (checkCollision(enemy->getFireBox(), Player.getBox()))
+		{
+			Player.damage(5*enemy->getFireDamage());
+			enemy->delFireball();
 		}
 	}
 
@@ -1776,6 +1928,10 @@ bool EnemyManager::checkWeak(Enemy::types enemy, Spell::spell_type spell)
 		if (spell == Spell::WIND)
 			return true;
 		break;
+	case Enemy::LIZARD:
+		if (spell == Spell::ICE)
+			return true;
+		break;
 	}
 
 	return false;
@@ -1802,7 +1958,7 @@ EnemyManager EnemyMang;
 class Button
 {
 public:
-	typedef enum { EXIT, RESUME } types;
+	typedef enum { EXIT, RESUME, SAVE } types;
 
 	Button(std::string STRING, types type);
 	void loadButton(int x, int y);
@@ -1854,6 +2010,10 @@ void Button::action()
 	case RESUME:
 		GAME_STATE = PLAYING;
 		break;
+	case SAVE:
+		save_game.open("SavedGame.txt");
+		Player.save();
+		save_game.close();
 	}
 }
 #pragma endregion Button Class
@@ -1925,6 +2085,7 @@ void Menu::draw()
 Menu PauseMenu;
 Button ExitButton("Exit", Button::EXIT);
 Button ResumeButton("Resume", Button::RESUME);
+Button SaveButton("Save", Button::SAVE);
 
 
 //AI Class and Functions
@@ -2530,7 +2691,7 @@ public:
 		NON, //No texture
 
 		MCH, //Main Character
-		SOR, GOB, //Enemies
+		SOR, GOB, LIZ, //Enemies
 		WIZ, ROB, //AIs
 		TCN, TCH, TCM, //Treasure Chests
 		DOR //Doorway
@@ -2877,6 +3038,10 @@ void LevelManager::buildLevel(textures blueprint[], Tile *level_boxes[], int hei
 			level = NULL;
 			EnemyMang.addEnemy((i%width)*tex_width, (i/width)*tex_height, Enemy::GRIZZOLAR_BEAR);
 			break;
+		case LIZ:
+			level = NULL;
+			EnemyMang.addEnemy((i%width)*tex_width, (i/width)*tex_height, Enemy::LIZARD);
+			break;
 		case WIZ:
 			level = NULL;
 			AIMang.addAI((i%width)*tex_width, (i/width)*tex_height, AI::WIZARD);
@@ -3026,6 +3191,8 @@ LevelManager::textures LevelManager::stringToEnum(std::string enumString)
 		return SOR;
 	else if (enumString == "GOB")
 		return GOB;
+	else if (enumString == "LIZ")
+		return LIZ;
 	else if (enumString == "WIZ")
 		return WIZ;
 	else if (enumString == "ROB")
@@ -3114,9 +3281,11 @@ bool loadFiles()
 
 	textArea = loadImage("Media/Fonts/textbox.png");
 
-	ExitButton.loadButton(SCREEN_WIDTH/2, SCREEN_HEIGHT/2 + 30);
-	ResumeButton.loadButton(SCREEN_WIDTH/2, SCREEN_HEIGHT/2 - 30);
+	ExitButton.loadButton(SCREEN_WIDTH/2, SCREEN_HEIGHT/2 + 60);
+	SaveButton.loadButton(SCREEN_WIDTH/2, SCREEN_HEIGHT/2);
+	ResumeButton.loadButton(SCREEN_WIDTH/2, SCREEN_HEIGHT/2 - 70);
 	PauseMenu.addButton(ExitButton);
+	PauseMenu.addButton(SaveButton);
 	PauseMenu.addButton(ResumeButton);
 
 	return true;
@@ -3241,7 +3410,8 @@ int main( int argc, char* args[] )
 				quit = true;
 		}
 
-		update();
+		if (GAME_STATE == PLAYING)
+			update();
 		draw();
 
 		//Regulates frame rate
