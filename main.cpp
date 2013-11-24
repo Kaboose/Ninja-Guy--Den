@@ -1,7 +1,6 @@
 #include "SDL.h"
 #include "SDL_image.h"
 #include "SDL_ttf.h"
-#include "SDL_mixer.h"
 #include "Timer.h"
 #include "Tile.h"
 #include <string>
@@ -15,10 +14,6 @@ ifstream input_file;
 
 typedef enum { PLAYING, AI_SPEAKING } GAME_STATES;
 GAME_STATES GAME_STATE = PLAYING;
-
-//Levels
-typedef enum { HOME_LEVEL, LEVEL_ONE } level_type;
-level_type current_level;
 
 //Used for determing where collisions are
 typedef enum { LEFT = 0, RIGHT, BOTTOM } sides;
@@ -40,17 +35,6 @@ TTF_Font *scriptFont = NULL;
 
 //TextBox
 SDL_Texture *textArea = NULL;
-
-//Music
-Mix_Music *music = NULL;
-
-//Sounds
-Mix_Chunk *door = NULL;
-Mix_Chunk *ogre = NULL;
-Mix_Chunk *swing = NULL;
-Mix_Chunk *clank = NULL;
-Mix_Chunk *chest = NULL;
-
 
 //Read the LazyFoo tutorials to better understand
 SDL_Window* window = NULL;
@@ -204,22 +188,15 @@ public:
 	int angle;
 
 	int damage;
-
-	SDL_RendererFlip flip;
-
-	SDL_Rect* clip;
 };
 
 void NinjaStar::init(SDL_Texture* texture, SDL_Rect box, float xvel, float yvel)
 {
-	Mix_PlayChannel(-1, clank, 0);
 	this->texture = texture;
 	this->box = box;
 	this->xvel = xvel;
 	this->yvel = yvel;
 	angle = 0;
-	flip = SDL_FLIP_NONE;
-	clip = NULL;
 }
 
 void NinjaStar::update()
@@ -234,7 +211,8 @@ void NinjaStar::update()
 void NinjaStar::draw()
 {
 	SDL_Rect destination = { box.x - Camera.x, box.y - Camera.y, box.w, box.h };
-	SDL_RenderCopyEx(renderer, texture, clip, &destination, angle, NULL, flip);
+	SDL_RendererFlip flip = SDL_FLIP_NONE;
+	SDL_RenderCopyEx(renderer, texture, NULL, &destination, angle, NULL, flip);
 }
 
 SDL_Rect NinjaStar::getBox()
@@ -242,40 +220,6 @@ SDL_Rect NinjaStar::getBox()
 	return box;
 }
 #pragma endregion NinjaStar Class
-
-//Spell Class
-#pragma region Spell
-class Spell : public NinjaStar
-{
-public:
-	typedef enum { FIRE, WIND, ICE, EARTH } spell_type;
-	void init(SDL_Texture* texture, int x, int y, float xvel, float yvel, SDL_RendererFlip flip, spell_type type, SDL_Rect* clip);
-	void update();
-
-	spell_type type;
-};
-
-void Spell::init(SDL_Texture* texture, int x, int y, float xvel, float yvel, SDL_RendererFlip flip, spell_type type, SDL_Rect* clip)
-{
-	this->texture = texture;
-	this->xvel = xvel;
-	this->yvel = yvel;
-	this->flip = flip;
-	this->type = type;
-	this->clip = clip;
-
-	SDL_Rect tempBox = { x, y, 30, 30 };
-	box = tempBox;
-
-	damage = 3;
-}
-
-void Spell::update()
-{
-	box.x += xvel;
-	box.y += yvel;
-}
-#pragma endregion Spell Class
 
 //Sword Class and Functinos
 #pragma region Sword
@@ -303,11 +247,13 @@ public:
 	SDL_RendererFlip flip;
 
 	bool done;
+
+	bool notDamagedYet;
 };
 
 void Sword::init(SDL_Texture* texture, SDL_Rect box, SDL_RendererFlip flip)
 {
-    Mix_PlayChannel( -1, swing, 0); 
+	notDamagedYet = true;
 	start = frame;
 	this->texture = texture;
 	this->flip = flip;
@@ -455,22 +401,13 @@ private:
 	SDL_Texture *ninja_star_texture;
 	SDL_Texture *sword_texture;
 	SDL_Texture* health_bar;
-	SDL_Texture* mana_bar;
-
-	//Magic textures
-	SDL_Texture *fire;
-	SDL_Texture *ice;
-	SDL_Texture *rock;
-	SDL_Texture *magic;
-
-	//Magic rectangles
-	SDL_Rect tornadoClip;
 
 	int beginFrame; //Used to know when buttons were pressed to regulate animation properly
 	int lastThrow;
 	int lastSwing;
 	int lastA;
 	int lastD;
+	int invulnerableTimeLeft;
 
 	//These are for preventing conflicts: walking and jumping, walking two directions, jumping twice, etc
 	bool jumping;
@@ -483,8 +420,8 @@ private:
 	bool running;
 	bool throwing;
 	bool swinging;
-	bool casting;
 	bool actionCheck;
+	bool flashing;
 
 	//NinjaStar
 	NinjaStar ninja_star;
@@ -493,16 +430,9 @@ private:
 	//Sword
 	Sword sword;
 
-	//Health/Mana
-	int health, mana;
-	SDL_Rect health_box, mana_box;
-
-	//Magic
-	int magicIndex;
-	int magicCapacity;
-	typedef enum { FIRE, ICE, EARTH, WIND } spells;
-	spells magicArray[4];
-	Spell casted_spell;
+	//Health
+	int health;
+	SDL_Rect health_box;
 
 public:
 	Character(); //Constructor
@@ -511,11 +441,13 @@ public:
 	void move(); //Moves the character
 	void handleInput(SDL_Event event); //Handles the input
 	void show(int x, int y); //Draws the character on the screen
+	void changeSwordState();
 
 	bool checkAction();
 	void resetActionCheck();
-	void movingCollision();
+	void checkCollision();
 	bool collision[3];
+	bool invulnerable;
 
 	//Ninja star
 	void addNinjaStars(int amount);
@@ -527,17 +459,11 @@ public:
 	SDL_Rect getSwordBox();
 	void delSword();
 	int swordDamage();
+	Sword getSword();
 
-	//Spells
-	SDL_Rect getSpellBox();
-	void delSpell();
-	int spellDamage();
-	Spell::spell_type spellType();
-
-	//Health/Mana
+	//Health
 	void drawStats();
 	void damage(int amount);
-	void cast(int amount);
 
 	SDL_Texture* loadImage(const char *filename);
 };
@@ -587,6 +513,7 @@ Character::Character()
 	lastThrow = 0;
 	lastA = -30;
 	lastD = -30;
+	invulnerableTimeLeft = 0;
 
 	jumping = false;
 	falling = false;
@@ -598,31 +525,20 @@ Character::Character()
 	running = false;
 	throwing = false;
 	swinging = false;
-	casting = false;
 	actionCheck = false;
+	invulnerable = false;
+	flashing = false;
 
-	//Health/Mana
+	//Health
 	health = 100;
 	SDL_Rect temp = { 10, 50, health*3, 10 };
 	health_box = temp;
-	mana = 100;
-	SDL_Rect temp2 = { 10, 70, mana*3, 10 };
-	mana_box = temp2;
 
 	//Weapons
 	ninja_star.damage = 4;
 	numNinjaStars = 0;
 
 	sword.damage = 6;
-
-	//Magic
-	SDL_Rect tempTornado = { 72, 176, 40, 40 };
-	tornadoClip = tempTornado;
-	magicIndex = 0;
-	magicCapacity = 4;
-	spells tempMagicArray[] = { FIRE, ICE, EARTH, WIND };
-	for (int i = 0; i < 4; i++)
-		magicArray[i] = tempMagicArray[i];
 }
 
 void Character::init(int x, int y)
@@ -647,13 +563,6 @@ void Character::load()
 	ninja_star_texture = loadImage("Media/Objects/ninjastar.png");
 	sword_texture = loadImage("Media/Objects/knife.png");
 	health_bar = loadImage("Media/Health.png");
-	mana_bar = loadImage("Media/Mana.png");
-	
-	//Magic
-	fire = loadImage("Media/Objects/fireball.png");
-	rock = loadImage("Media/Objects/rock.png");
-	ice = loadImage("Media/Objects/snowflake.png");
-	magic = loadImage("Media/Objects/magic_icons.png");
 }
 
 SDL_Texture* Character::loadImage(const char *filename)
@@ -736,41 +645,6 @@ void Character::handleInput(SDL_Event event)
 			if (event.key.repeat == 0)
 				actionCheck = true;
 			break;
-		case SDLK_f:
-			if (event.key.repeat == 0 && mana > 0 && !casting)
-			{
-				SDL_RendererFlip flip;
-				float xvel = 0;
-				if (direction == FACE_RIGHT)
-				{
-					xvel = 10;
-					flip = SDL_FLIP_NONE;
-				}
-				else
-				{
-					xvel = -10;
-					flip = SDL_FLIP_HORIZONTAL;
-				}
-
-				switch(magicArray[magicIndex])
-				{
-				case FIRE:
-					casted_spell.init(fire, box.x, box.y, xvel, 0, flip, Spell::FIRE, NULL);
-					break;
-				case ICE:
-					casted_spell.init(ice, box.x, box.y, xvel, 0, flip, Spell::ICE, NULL);
-					break;
-				case EARTH:
-					casted_spell.init(rock, box.x, box.y, xvel, 0, flip, Spell::EARTH, NULL);
-					break;
-				case WIND:
-					casted_spell.init(magic, box.x, box.y, xvel, 0, flip, Spell::WIND, &tornadoClip);
-					break;
-				}
-				cast(10);
-				casting = true;
-			}
-			break;
         }
 	}
 	else if( event.type == SDL_KEYUP )
@@ -832,22 +706,7 @@ void Character::handleInput(SDL_Event event)
 			sword.init(sword_texture, box, flip);
 			swinging = true;
 			lastSwing = frame;
-		}
-	}
 
-	if (event.type == SDL_MOUSEWHEEL)
-	{
-		if (event.wheel.y > 0)
-		{
-			magicIndex++;
-			if (magicIndex > magicCapacity-1)
-				magicIndex = 0;
-		}
-		else if (event.wheel.y < 0)
-		{
-			magicIndex--;
-			if (magicIndex < 0)
-				magicIndex = magicCapacity-1;
 		}
 	}
 }
@@ -947,7 +806,6 @@ void Character::move()
 
 	//Health
 	health_box.w = health*3;
-	mana_box.w = mana*3;
 
 	//Ninja star
 	if (ninja_star.texture != NULL)
@@ -957,16 +815,6 @@ void Character::move()
 	{
 		throwing = false;
 		delNinjaStar();
-	}
-
-	//Spell
-	if (casting)
-		casted_spell.update();
-
-	if (!checkCollision(casted_spell.getBox(), Camera))
-	{
-		delSpell();
-		casting = false;
 	}
 
 	//Sword
@@ -998,13 +846,30 @@ void Character::show(int x, int y)
 	if (ninja_star.texture != NULL)
 		ninja_star.draw();
 
-	if (casting)
-		casted_spell.draw();
-
 	SDL_Rect destination = { box.x - x, box.y - y, box.w, box.h };
 
+	
+	if (invulnerable && invulnerableTimeLeft > 0)
+	{
+		if (invulnerableTimeLeft % 5 == 0)
+			flashing = true;
+		else
+			flashing = false;
+
+		invulnerableTimeLeft--;
+
+	}
+	else
+	{
+		invulnerable = false;
+		flashing = false;
+	}
+
 	//LazyFoo** must pass in the renderer, texture, reference to the sprite (as a rectangle), and reference to the destination on the screen
-	SDL_RenderCopy(renderer, texture, &clip[currentClip], &destination);
+	if (flashing)
+		SDL_RenderCopy(renderer, NULL, &clip[currentClip], &destination);
+	else
+		SDL_RenderCopy(renderer, texture, &clip[currentClip], &destination);
 
 	if (swinging)
 		sword.draw();
@@ -1020,7 +885,7 @@ void Character::resetActionCheck()
 	actionCheck = false;
 }
 
-void Character::movingCollision()
+void Character::checkCollision()
 {
 	int index = (box.y/40)*LevelWidth/40 + (box.x/40);
 	if (index >= LevelSize || index <= 0)
@@ -1057,10 +922,10 @@ void Character::movingCollision()
 						collision[BOTTOM] = true;
 					}
 				}
-				else if (CurrentLevel[index +1 +LevelWidth/40*row+(xvel*row)/40] != NULL &&  index%(LevelWidth/40) != LevelWidth/40 - 1)
+				else if (CurrentLevel[index +1 +LevelWidth/40*row+(xvel*row)/40] != NULL)
 				{
 					SDL_Rect tile = CurrentLevel[index +1 +LevelWidth/40*row+(xvel*row)/40]->getBox();
-					if (box.x + box.w-5 > tile.x && CurrentLevel[index +1 +LevelWidth/40*row+(xvel*row)/40]->collidable())
+					if (box.x + box.w > tile.x && CurrentLevel[index +1 +LevelWidth/40*row+(xvel*row)/40]->collidable())
 					{
 						ground_tile = tile;
 						collision[BOTTOM] = true;
@@ -1122,28 +987,6 @@ int Character::swordDamage()
 	return sword.damage;
 }
 
-SDL_Rect Character::getSpellBox()
-{
-	return casted_spell.box;
-}
-
-void Character::delSpell()
-{
-	casted_spell.texture = NULL;
-	casted_spell.box.x = Camera.x-100;
-	casted_spell.box.y = Camera.y-100;
-}
-
-int Character::spellDamage()
-{
-	return casted_spell.damage;
-}
-
-Spell::spell_type Character::spellType()
-{
-	return casted_spell.type;
-}
-
 void Character::drawStats()
 {
 	//NinjaStar
@@ -1153,40 +996,25 @@ void Character::drawStats()
 	SDL_Texture* number = loadText("", numNinjaStars, gFont, &temp2);
 	SDL_RenderCopy(renderer, number, NULL, &temp2);
 
-	//Health/Mana
+	//Health
 	SDL_RenderCopy(renderer, health_bar, NULL, &health_box);
-	SDL_RenderCopy(renderer, mana_bar, NULL, &mana_box);
-
-	//Magic
-	if (magicCapacity > 0)
-	{
-		SDL_Rect magic_destination = { 60, 10, 30, 30 };
-		switch (magicArray[magicIndex])
-		{
-		case FIRE:
-			SDL_RenderCopy(renderer, fire, NULL, &magic_destination);
-			break;
-		case ICE:
-			SDL_RenderCopy(renderer, ice, NULL, &magic_destination);
-			break;
-		case EARTH:
-			SDL_RenderCopy(renderer, rock, NULL, &magic_destination);
-			break;
-		case WIND:
-			SDL_RenderCopy(renderer, magic, &tornadoClip, &magic_destination);
-			break;
-		}
-	}
 }
 
 void Character::damage(int amount)
 {
 	health -= amount;
+	invulnerable = true;
+	invulnerableTimeLeft = 90;
 }
 
-void Character::cast(int amount)
+Sword Character::getSword()
 {
-	mana -= amount;
+	return sword;
+}
+
+void Character::changeSwordState()
+{
+	sword.notDamagedYet = !sword.notDamagedYet;
 }
 #pragma endregion Character Class
 
@@ -1194,18 +1022,14 @@ void Character::cast(int amount)
 Character Player;
 
 
-//Enemy Class and Functions
-#pragma region Enemy
-class Enemy : public Moveable
+//SmallOrc Class and Functions
+#pragma region SmallOrc
+class SmallOrc : public Moveable
 {
 public:
-	typedef enum { STANDING_LEFT, STANDING_RIGHT, RUNNING_LEFT, RUNNING_RIGHT, JUMPING, RECOVER, DEAD} states;
+	typedef enum { STANDING_LEFT, STANDING_RIGHT, RUNNING_LEFT, RUNNING_RIGHT, RECOVER, DEAD} states;
 	typedef enum { LEFT = 0, RIGHT, BOTTOM } sides;
-	typedef enum { SMALL_ORC, GRIZZOLAR_BEAR, BIRD, LIZARD } types;
-
-	types type;
-
-	Enemy(SDL_Texture* texture, int x, int y, types type);
+	SmallOrc(SDL_Texture* texture, int x, int y);
 	void update();
 	void draw();
 
@@ -1231,96 +1055,44 @@ private:
 	bool falling;
 };
 
-Enemy::Enemy(SDL_Texture *texture, int x, int y, types type)
+SmallOrc::SmallOrc(SDL_Texture *texture, int x, int y)
 {
-	this->type = type;
+	state = STANDING_LEFT;
+	X_VELOCITY = 4;
+	Y_VELOCITY = 1;
+	MAX_Y_VELOCITY = 10;
 
-	if (type == SMALL_ORC)
+	index = 1;
+	angle = 0;
+	health = 10;
+
+	int idle_width = 48, idle_height = 72;
+	int run_width = 64, run_height = 72;
+
+	for (int i = 0; i < 12; i++)
 	{
-		state = STANDING_LEFT;
-		X_VELOCITY = 4;
-		Y_VELOCITY = 1;
-		MAX_Y_VELOCITY = 10;
-	
-		index = 1;
-		angle = 0;
-		health = 10;
-	
-		int idle_width = 48, idle_height = 72;
-		int run_width = 64, run_height = 72;
-	
-		for (int i = 0; i < 12; i++)
+		if (i < 4)
 		{
-			if (i < 4)
-			{
-				clip[i].x = i%4*idle_width;
-				clip[i].y = 0;
-				clip[i].w = idle_width;
-				clip[i].h = idle_height;
-				continue;
-			}
-			clip[i].x = i%4*run_width;
-			clip[i].y = i/4*run_height;
-			clip[i].w = run_width;
-			clip[i].h = run_height;
+			clip[i].x = i%4*idle_width;
+			clip[i].y = 0;
+			clip[i].w = idle_width;
+			clip[i].h = idle_height;
+			continue;
 		}
-	
-		box.w = idle_width;
-		box.h = idle_height;
-
-		currentClip = 0;
+		clip[i].x = i%4*run_width;
+		clip[i].y = i/4*run_height;
+		clip[i].w = run_width;
+		clip[i].h = run_height;
 	}
-	else if (type == GRIZZOLAR_BEAR)
-	{
-		state = STANDING_LEFT;
-		X_VELOCITY = 5;
-		Y_VELOCITY = 1;
-		MAX_Y_VELOCITY = 10;
 
-		index = 1;
-		angle = 0;
-		health = 10;
-	
-		int idle_width = 56, idle_height = 64;
-		int run_width = 42, run_height = 64;
-		int jump_width = 56, jump_height = 64;
-		int standing_gap = 16, running_gap = 46, jumping_gap = 40;
-	
-		for (int i = 0; i < 12; i++)
-		{
-			if (i < 4)
-			{
-				clip[i].x = i%4*(idle_width+standing_gap)+standing_gap;
-				clip[i].y = 120;
-				clip[i].w = idle_width;
-				clip[i].h = idle_height;
-				continue;
-			}
-			else if (i < 8)
-			{
-				clip[i].x = i%4*(run_width+running_gap) + 24;
-				clip[i].y = 200;
-				clip[i].w = run_width;
-				clip[i].h = run_height;
-			}
-			else
-			{
-				clip[i].x = i%4*(jump_width*jumping_gap) + 24;
-				clip[i].y = 472;
-				clip[i].w = jump_width;
-				clip[i].h = jump_height;
-			}
-		}
-	
-		box.w = idle_width;
-		box.h = idle_height;
+	box.w = idle_width;
+	box.h = idle_height;
 
-		currentClip = 0;
-	}
-	
 	this->texture = texture;
-	box.x = x;
+	box.x = x - (box.w - 40);
 	box.y = y - (box.h - 45);
+
+	currentClip = 0;
 
 	xvel = 0;
 	yvel = 0;
@@ -1334,7 +1106,7 @@ Enemy::Enemy(SDL_Texture *texture, int x, int y, types type)
 	falling = false;
 }
 
-void Enemy::update()
+void SmallOrc::update()
 {
 	
 	if (state == STANDING_LEFT || state == STANDING_RIGHT || state == RECOVER)
@@ -1356,25 +1128,12 @@ void Enemy::update()
 
 	if (state == RUNNING_LEFT || state == RUNNING_RIGHT)
 	{
-		switch (type)
-		{
-		case SMALL_ORC:		
-			if ((frame-beginFrame)%4 == 0)
-				currentClip++;
+		if ((frame-beginFrame)%4 == 0)
+			currentClip++;
+		
+		if (currentClip > 11)
+			currentClip = 4;
 
-			if (currentClip > 11)
-				currentClip = 4;
-			break;
-		case GRIZZOLAR_BEAR:
-			if ((frame-beginFrame)%4 == 0)
-				currentClip += index;
-
-			if (currentClip > 7 || currentClip < 4)
-			{
-				index *= -1;
-				currentClip += index;
-			}
-		}
 		if (state == RUNNING_LEFT)
 		{
 			xvel = -X_VELOCITY;
@@ -1442,13 +1201,13 @@ void Enemy::update()
 		falling = true;
 }
 
-void Enemy::draw()
+void SmallOrc::draw()
 {
 	SDL_Rect destination = { box.x - Camera.x, box.y - Camera.y, box.w, box.h };
 	SDL_RenderCopyEx(renderer, texture, &clip[currentClip], &destination, angle, NULL, flip);
 }
 
-void Enemy::setState(states state)
+void SmallOrc::setState(states state)
 {
 	if (this->state == DEAD)
 		return;
@@ -1464,11 +1223,11 @@ void Enemy::setState(states state)
 		yvel = Y_VELOCITY;
 }
 
-int Enemy::getState()
+int SmallOrc::getState()
 {
 	return state;
 }
-#pragma endregion Enemy Class
+#pragma endregion Small Orc Class
 
 
 //EnemyManager Class and Functions
@@ -1476,24 +1235,17 @@ int Enemy::getState()
 class EnemyManager
 {
 private:
-	//Enemy textures
 	SDL_Texture* small_orc_texture;
-	SDL_Texture* grizzolar_bear_texture;
-	SDL_Texture* bird_texture;
-	SDL_Texture* lizzard_texture;
-
 	SDL_Texture* loadImage(const char *filename);
-	std::vector<Enemy> enemies;
+	std::vector<SmallOrc> small_orcs;
 	bool cameraCollision(SDL_Rect box);
-	void collisionManager(Enemy *enemy);
-	bool checkWeak(Enemy::types enemy, Spell::spell_type spell);
+	void collisionManager(SmallOrc *orc);
 
 public:
-	void addEnemy(int x, int y, Enemy::types type);
+	void addSmallOrc(int x, int y);
 	void load();
 	void update();
 	void draw();
-	void deleteAll();
 };
 
 SDL_Texture* EnemyManager::loadImage(const char *filename)
@@ -1526,93 +1278,51 @@ SDL_Texture* EnemyManager::loadImage(const char *filename)
 void EnemyManager::load()
 {
 	small_orc_texture = loadImage("Media/Enemies/Small Orc.png");
-	grizzolar_bear_texture = loadImage("Media/Enemies/Grizzolar Bear.png");
 }
 
-void EnemyManager::addEnemy(int x, int y, Enemy::types type)
+void EnemyManager::addSmallOrc(int x, int y)
 {
-	SDL_Texture *texture = NULL;
-
-	switch (type)
-	{
-	case Enemy::SMALL_ORC:
-		texture = small_orc_texture;
-		break;
-	case Enemy::GRIZZOLAR_BEAR:
-		texture = grizzolar_bear_texture;
-		break;
-	}
-
-	enemies.push_back(Enemy(texture, x, y, type));
+	small_orcs.push_back(SmallOrc(small_orc_texture, x, y));
 }
 
 void EnemyManager::update()
 {
-	for (int i = 0; i < enemies.size(); i++)
+	for (int i = 0; i < small_orcs.size(); i++)
 	{
 		SDL_Rect player = Player.getBox();
-		SDL_Rect enemy_box = enemies.at(i).getBox();
-		Enemy *enemy = &enemies.at(i);
+		SDL_Rect enemy = small_orcs.at(i).getBox();
+		SmallOrc *orc = &small_orcs.at(i);
 
-		if (!cameraCollision(enemy_box))
-			continue;
-
-		//Move enemies
-		switch (enemy->type)
+		//Move orc
+		if (((player.y + player.h < enemy.y + enemy.h && player.y + player.h > enemy.y) ||
+			(player.y < enemy.y + enemy.h && player.y > enemy.y)) &&
+			(orc->getState() == orc->STANDING_LEFT || orc->getState() == orc->STANDING_RIGHT))
 		{
-		case Enemy::SMALL_ORC:
-			if (((player.y + player.h < enemy_box.y + enemy_box.h && player.y + player.h > enemy_box.y) ||
-				(player.y < enemy_box.y + enemy_box.h && player.y > enemy_box.y)) &&
-				(enemy->getState() == Enemy::STANDING_LEFT || enemy->getState() == Enemy::STANDING_RIGHT))
-			{
-				int delta_x = player.x - enemy_box.x;
-	
-				if (delta_x < 200 && delta_x > 0 && enemy->getState() != Enemy::RECOVER)
-					enemy->setState(Enemy::RUNNING_RIGHT);
-				else if (delta_x > -200 && delta_x < 0 && enemy->getState() != Enemy::RECOVER)
-					enemy->setState(Enemy::RUNNING_LEFT);
-			}
-			break;
-		case Enemy::GRIZZOLAR_BEAR:
-			if (((player.y + player.h < enemy_box.y + enemy_box.h && player.y + player.h > enemy_box.y) ||
-				(player.y < enemy_box.y + enemy_box.h && player.y > enemy_box.y)) &&
-				(enemy->getState() == Enemy::STANDING_LEFT || enemy->getState() == Enemy::STANDING_RIGHT))
-			{
-				int delta_x = player.x - enemy_box.x;
-	
-				if (delta_x < 300 && delta_x > 0 && enemy->getState() != Enemy::RECOVER)
-					enemy->setState(Enemy::RUNNING_RIGHT);
-				else if (delta_x > -300 && delta_x < 0 && enemy->getState() != Enemy::RECOVER)
-					enemy->setState(Enemy::RUNNING_LEFT);
-			}
-			break;
+			int delta_x = player.x - enemy.x;
+
+			if (delta_x < 200 && delta_x > 0 && orc->getState() != orc->RECOVER)
+				orc->setState(orc->RUNNING_RIGHT);
+			else if (delta_x > -200 && delta_x < 0 && orc->getState() != orc->RECOVER)
+				orc->setState(orc->RUNNING_LEFT);
 		}
 
-		collisionManager(enemy);
+		collisionManager(orc);
 
 		//Update
-		if (cameraCollision(enemy_box))
-			enemy->update();
+		if (cameraCollision(enemy))
+			orc->update();
 
-		if (enemy->getState() == Enemy::DEAD && !cameraCollision(enemy_box))
-			enemies.erase(enemies.begin() + i);
+		if (orc->getState() == orc->DEAD && !cameraCollision(enemy))
+			small_orcs.erase(small_orcs.begin() + i);
 	}
 }
 
 void EnemyManager::draw()
 {
-	for (int i = 0; i < enemies.size(); i++)
+	for (int i = 0; i < small_orcs.size(); i++)
 	{
-		if (cameraCollision(enemies.at(i).getBox()))
-			enemies.at(i).draw();
-	}
-}
-
-void EnemyManager::deleteAll()
-{
-	for (int i = 0; i < enemies.size(); i++)
-	{
-		enemies.erase(enemies.begin());
+		if (cameraCollision(small_orcs.at(i).getBox()))
+			small_orcs.at(i).draw();
 	}
 }
 
@@ -1634,46 +1344,46 @@ bool EnemyManager::cameraCollision(SDL_Rect box)
 	return true;
 }
 
-void EnemyManager::collisionManager(Enemy* enemy)
+void EnemyManager::collisionManager(SmallOrc* orc)
 {
-	if (enemy->getState() == Enemy::DEAD)
+	if (orc->getState() == orc->DEAD)
 		return;
 
-	SDL_Rect enemy_box = enemy->getBox();
+	SDL_Rect enemy = orc->getBox();
 	SDL_Rect player = Player.getBox();
 
 	//Check collision for orc
-	int index = (enemy_box.y/40)*LevelWidth/40 + (enemy_box.x/40);
+	int index = (enemy.y/40)*LevelWidth/40 + (enemy.x/40);
 	if (index >= LevelSize)
 	{
-		enemy->collision[Enemy::LEFT] = false;
-		enemy->collision[Enemy::RIGHT] = false;
+		orc->collision[orc->LEFT] = false;
+		orc->collision[orc->RIGHT] = false;
 	}
 	else 
 	{
 		if (CurrentLevel[index] == NULL)
-			enemy->collision[Enemy::LEFT] = false;
+			orc->collision[orc->LEFT] = false;
 		else
-			enemy->collision[Enemy::LEFT] = CurrentLevel[index]->collidable();
+			orc->collision[orc->LEFT] = CurrentLevel[index]->collidable();
 					
 		if (CurrentLevel[index+1] == NULL)
-			enemy->collision[Enemy::RIGHT] = false;
+			orc->collision[orc->RIGHT] = false;
 		else
-			enemy->collision[Enemy::RIGHT] = CurrentLevel[index+1]->collidable();
+			orc->collision[orc->RIGHT] = CurrentLevel[index+1]->collidable();
 
-		enemy->collision[BOTTOM] = false;
-		if (enemy->getYVel() < 0)
-			enemy->collision[BOTTOM] = false;
+		orc->collision[BOTTOM] = false;
+		if (orc->getYVel() < 0)
+			orc->collision[BOTTOM] = false;
 		else
 		{
 			int row = 1;
-			while (index+LevelWidth/40*row+(enemy->getXVel()*row)/40 < LevelSize && enemy->collision[BOTTOM] == false)
+			while (index+LevelWidth/40*row+(orc->getXVel()*row)/40 < LevelSize && orc->collision[BOTTOM] == false)
 			{
-				if (CurrentLevel[index+LevelWidth/40*row+(enemy->getXVel()*row)/40] != NULL &&
-					CurrentLevel[index+LevelWidth/40*row+(enemy->getXVel()*row)/40]->collidable())
+				if (CurrentLevel[index+LevelWidth/40*row+(orc->getXVel()*row)/40] != NULL &&
+					CurrentLevel[index+LevelWidth/40*row+(orc->getXVel()*row)/40]->collidable())
 				{
-					enemy->ground_tile = CurrentLevel[index+LevelWidth/40*row+(enemy->getXVel()*row)/40]->getBox();
-					enemy->collision[BOTTOM] = true;
+					orc->ground_tile = CurrentLevel[index+LevelWidth/40*row+(orc->getXVel()*row)/40]->getBox();
+					orc->collision[BOTTOM] = true;
 				}
 				row++;
 			}
@@ -1681,7 +1391,7 @@ void EnemyManager::collisionManager(Enemy* enemy)
 	}
 		
 	//Damage with player
-	if (checkCollision(player, enemy_box))
+	if (!Player.invulnerable && checkCollision(player, enemy))
 	{
 		Player.damage(5);
 		if (Player.getYVel() > 0)
@@ -1693,81 +1403,64 @@ void EnemyManager::collisionManager(Enemy* enemy)
 			Player.setYVel(-10);
 		}
 					
-		Player.setXVel(enemy_box.x <= player.x ? 4 : -4);
+		Player.setXVel(enemy.x < player.x ? 4 : -4);
 
-		enemy->setState(Enemy::RECOVER);
+		orc->setState(orc->RECOVER);
 
-		if (enemy_box.x < player.x)
+		if (enemy.x < player.x)
 		{
-			if (!enemy->collision[LEFT])
-				enemy->box.x -= 10;
-			enemy->aggroState = Enemy::RUNNING_RIGHT;
+			if (!orc->collision[LEFT])
+				orc->box.x -= 10;
+			orc->aggroState = orc->RUNNING_RIGHT;
 		}
 		else
 		{
-			if (!enemy->collision[RIGHT])
-				enemy->box.x += 10;
-			enemy->aggroState = Enemy::RUNNING_LEFT;
+			if (!orc->collision[RIGHT])
+				orc->box.x += 10;
+			orc->aggroState = orc->RUNNING_LEFT;
 		}
 	}
 
-	//Damage from player
+	//Damage with ninja star
 	SDL_Rect NJbox = Player.getNinjaStarBox();
 	SDL_Rect swordBox = Player.getSwordBox();
-	SDL_Rect spellBox = Player.getSpellBox();
-	bool star = checkCollision(enemy_box, NJbox);
-	bool sword = checkCollision(enemy_box, swordBox);
-	bool spell = checkCollision(enemy_box, spellBox);
+	bool star = checkCollision(enemy, NJbox);
+	bool sword = checkCollision(enemy, swordBox);
+	Sword currentSword = Player.getSword();
 
-	if ( (star || sword || spell) && enemy->getState() != Enemy::RECOVER)
+	if (star || sword)
 	{
-		enemy->setState(Enemy::RECOVER);
-		if ((star && enemy_box.x < NJbox.x) || (sword && enemy_box.x < swordBox.x) || (spell && enemy_box.x < spellBox.x))
+		if (currentSword.notDamagedYet && sword)
 		{
-			if (!enemy->collision[LEFT])
-				enemy->box.x -= 10;
-			enemy->aggroState = Enemy::RUNNING_RIGHT;
-		}
-		else
-		{
-			if (!enemy->collision[RIGHT])
-				enemy->box.x += 10;
-			enemy->aggroState = Enemy::RUNNING_LEFT;
-		}
-		Player.delNinjaStar();
-		Player.delSpell();
-		
-		if (star)
-			enemy->health -= Player.ninjaStarDamage();
-		else if (sword)
-			enemy->health -= Player.swordDamage();
-		else if (spell)
-		{
-			if (checkWeak(enemy->type, Player.spellType()))
-				enemy->health -= 2*Player.spellDamage();
+			orc->setState(orc->RECOVER);
+			if ((star && enemy.x < NJbox.x) || (sword && enemy.x < swordBox.x))
+			{
+				if (!orc->collision[LEFT])
+					orc->box.x -= 10;
+				orc->aggroState = orc->RUNNING_RIGHT;
+			}
 			else
-				enemy->health -= Player.spellDamage();
+			{
+				if (!orc->collision[RIGHT])
+					orc->box.x += 10;
+				orc->aggroState = orc->RUNNING_LEFT;
+			}
+				orc->health -= Player.swordDamage();
+			if (orc->health <= 0)
+				orc->setState(orc->DEAD);
+
+				Player.changeSwordState();
 		}
-		if (enemy->health <= 0)
-			enemy->setState(Enemy::DEAD);
-	}
-}
 
-bool EnemyManager::checkWeak(Enemy::types enemy, Spell::spell_type spell)
-{
-	switch (enemy)
-	{
-	case Enemy::SMALL_ORC:
-		if (spell == Spell::FIRE)
-			return true;
-		break;
-	case Enemy::GRIZZOLAR_BEAR:
-		if (spell == Spell::WIND)
-			return true;
-		break;
-	}
+			Player.delNinjaStar();
 
-	return false;
+			if (star)
+				orc->health -= Player.ninjaStarDamage();
+
+			if (orc->health <= 0)
+				orc->setState(orc->DEAD);
+
+	}
 }
 #pragma endregion EnemyManager Class
 
@@ -2099,7 +1792,6 @@ public:
 	void addAI(int x, int y, AI::types type);
 	void update();
 	void draw();
-	void deleteAll();
 };
 
 void AIManager::load()
@@ -2179,14 +1871,6 @@ void AIManager::draw()
 			bots.at(i).draw();
 	}
 }
-
-void AIManager::deleteAll()
-{
-	for (int i = 0; i < bots.size(); i++)
-	{
-		bots.erase(bots.begin() + i);
-	}
-}
 #pragma endregion AIManager Class
 
 //********** THE AI MANAGER ********
@@ -2194,7 +1878,6 @@ AIManager AIMang;
 #pragma endregion AI with Interaction
 
 //******************************************* END INTERACTION WITH AI **************************
-
 
 
 
@@ -2269,7 +1952,6 @@ void TreasureChest::setState(states state)
 	this->state = state;
 	if (state == OPEN)
 	{
-		Mix_PlayChannel(-1, chest, 0);
 		opened = frame;
 		switch (type)
 		{
@@ -2317,7 +1999,6 @@ public:
 	void addChest(int x, int y, int type);
 	void update();
 	void draw();
-	void deleteAll();
 };
 
 void TreasureChestManager::load()
@@ -2358,14 +2039,6 @@ void TreasureChestManager::draw()
 			treasure_chests.at(i).draw();
 	}
 }
-
-void TreasureChestManager::deleteAll()
-{
-	for (int i = 0; i < treasure_chests.size(); i++)
-	{
-		treasure_chests.erase(treasure_chests.begin() + i);
-	}
-}
 #pragma endregion TreasureChestManager Class
 
 //********** THE TREASURE CHEST MANAGER *************
@@ -2378,122 +2051,6 @@ TreasureChestManager TreasureChestMang;
 
 
 
-
-
-
-
-//***************************************** DOORWAYS ***********************************************
-
-#pragma region Door
-class Door
-{
-private:
-	SDL_Texture* texture;
-	SDL_Rect box;
-	SDL_Rect clip;
-	level_type level;
-
-public:
-	Door(int x, int y, SDL_Texture* texture, level_type level);
-	SDL_Rect getBox();
-	void update();
-	void draw();
-};
-
-Door::Door(int x, int y, SDL_Texture* texture, level_type level)
-{
-	SDL_Rect temp = { 0, 512, 128, 128 };
-	clip = temp;
-
-	box.x = x - 88;
-	box.y = y - 85;
-	box.w = 128;
-	box.h = 128;
-
-	this->texture = texture;
-	this->level = level;
-}
-
-SDL_Rect Door::getBox()
-{
-	return box;
-}
-
-void Door::update()
-{
-	if (checkCollision(box, Player.getBox()) && Player.checkAction())
-	{	
-	    Mix_PlayChannel(-1, door, 0);
-		current_level = level;
-	}
-}
-
-void Door::draw()
-{
-	SDL_Rect destination = { box.x - Camera.x, box.y - Camera.y, box.w, box.h };
-	SDL_RenderCopy(renderer, texture, &clip, &destination);
-}
-#pragma endregion Door Class
-
-#pragma region DoorManager
-class DoorManager
-{
-private:
-	std::vector<Door> doors;
-	SDL_Texture* texture;
-
-public:
-	void load();
-	void addDoor(int x, int y);
-	void update();
-	void draw();
-	void deleteAll();
-};
-
-void DoorManager::load()
-{
-	texture = loadImage("Media/Doorway.png");
-}
-
-void DoorManager::addDoor(int x, int y)
-{
-	doors.push_back(Door(x, y, texture, LEVEL_ONE));
-}
-
-void DoorManager::update()
-{
-	for (int i = 0; i < doors.size(); i++)
-		if (checkCollision(doors.at(i).getBox(), Camera))
-			doors.at(i).update();
-}
-
-void DoorManager::draw()
-{
-	for (int i = 0; i < doors.size(); i++)
-		if (checkCollision(doors.at(i).getBox(), Camera))
-			doors.at(i).draw();
-}
-
-void DoorManager::deleteAll()
-{
-	for (int i = 0; i < doors.size(); i++)
-	{
-		doors.erase(doors.begin() + i);
-	}
-}
-#pragma endregion DoorManager Class
-
-DoorManager DoorMang;
-
-//*************************************** END DOORWAYS **********************************************
-
-
-
-
-
-
-
-
 //*************************************************** LEVEL MANAGER ****************************************
 
 //Level Manager Class and Functions
@@ -2501,6 +2058,8 @@ DoorManager DoorMang;
 class LevelManager
 {
 public:
+	typedef enum { HOME_LEVEL, LEVEL_ONE } level_type;
+
 	typedef enum { NE1, NW1, SE1, SW1, NE2, NW2, SE2, SW2, NE3, NW3, SE3, SW3, NE4, NW4, SE4, SW4, NE5, NW5, SE5, SW5, //Walls
 		WE1, WW1, WE2, WW2, //Walkways
 		TN1, TS1, TN2, TS2, //Totems
@@ -2508,10 +2067,9 @@ public:
 		NON, //No texture
 
 		MCH, //Main Character
-		SOR, GOB, //Enemies
+		SOR, //Small Orc
 		WIZ, ROB, //AIs
-		TC1, //Treasure Chests
-		DOR //Doorway
+		TC1 //Treasure Chests
 	} textures;
 
 	void loadTextures();
@@ -2527,7 +2085,7 @@ private:
 	SDL_Rect *background;
 
 	//Level index
-	level_type prevLevel;
+	int current_level;
 	int current_height;
 	int current_width;
 
@@ -2694,14 +2252,7 @@ void LevelManager::initializeLevels()
 
 void LevelManager::loadLevel(level_type level)
 {
-	prevLevel = level;
 	current_level = level;
-
-	EnemyMang.deleteAll();
-	AIMang.deleteAll();
-	TreasureChestMang.deleteAll();
-	DoorMang.deleteAll();
-
 	switch (current_level)
 	{
 	case HOME_LEVEL:
@@ -2714,8 +2265,6 @@ void LevelManager::loadLevel(level_type level)
 		LevelHeight = home_level_height*home_texelh;
 		LevelSize = home_level_width*home_level_height;
 		Background = home_level_background;
-		music = Mix_LoadMUS( "Media/Music/home_level.wav" );
-		Mix_PlayMusic(music, -1);
 		break;
 	case LEVEL_ONE:
 		buildLevel(levelone_level_blueprint, levelone_level, levelone_level_height, levelone_level_width, levelone_texelw, levelone_texelh);
@@ -2727,13 +2276,8 @@ void LevelManager::loadLevel(level_type level)
 		LevelHeight = levelone_level_height*home_texelh;
 		LevelSize = levelone_level_width*home_level_height;
 		Background = levelone_level_background;
-		music = Mix_LoadMUS( "Media/Music/level_one.wav" );
-		Mix_PlayMusic(music, -1);
 		break;
 	}
-
-	Player.box.x = start_x;
-	Player.box.y = start_y;
 }
 
 void LevelManager::buildLevel(textures blueprint[], Tile *level_boxes[], int height, int width, int tex_width, int tex_height)
@@ -2741,7 +2285,7 @@ void LevelManager::buildLevel(textures blueprint[], Tile *level_boxes[], int hei
 	for (int i = 0; i < height*width; i++)
 	{
 		bool solid = true;
-		SDL_Texture *level;
+		SDL_Texture *level = NULL;
 
 		switch (blueprint[i])
 		{
@@ -2853,11 +2397,7 @@ void LevelManager::buildLevel(textures blueprint[], Tile *level_boxes[], int hei
 			break;
 		case SOR:
 			level = NULL;
-			EnemyMang.addEnemy((i%width)*tex_width, (i/width)*tex_height, Enemy::SMALL_ORC);
-			break;
-		case GOB:
-			level = NULL;
-			EnemyMang.addEnemy((i%width)*tex_width, (i/width)*tex_height, Enemy::GRIZZOLAR_BEAR);
+			EnemyMang.addSmallOrc((i%width)*tex_width, (i/width)*tex_height);
 			break;
 		case WIZ:
 			level = NULL;
@@ -2870,10 +2410,6 @@ void LevelManager::buildLevel(textures blueprint[], Tile *level_boxes[], int hei
 		case TC1:
 			level = NULL;
 			TreasureChestMang.addChest((i%width)*tex_width, (i/width)*tex_height, 1);
-			break;
-		case DOR:
-			level = NULL;
-			DoorMang.addDoor((i%width)*tex_width, (i/width)*tex_height);
 			break;
 		}
 
@@ -2898,9 +2434,6 @@ void LevelManager::draw()
 			continue;
 		CurrentLevel[i]->draw(Camera, renderer);
 	}
-
-	if (prevLevel != current_level)
-		loadLevel(current_level);
 }
 
 void LevelManager::loadLevelFromText(std::string filename, level_type level)
@@ -2998,16 +2531,12 @@ LevelManager::textures LevelManager::stringToEnum(std::string enumString)
 		return MCH;
 	else if (enumString == "SOR")
 		return SOR;
-	else if (enumString == "GOB")
-		return GOB;
 	else if (enumString == "WIZ")
 		return WIZ;
 	else if (enumString == "ROB")
 		return ROB;
 	else if (enumString == "TC1")
 		return TC1;
-	else if (enumString == "DOR")
-		return DOR;
 	else
 		return NON;
 #pragma endregion Conversions
@@ -3018,6 +2547,7 @@ LevelManager::textures LevelManager::stringToEnum(std::string enumString)
 LevelManager LevelMang;
 
 //************************************************** END LEVEL MANAGER ***********************************
+
 
 
 
@@ -3061,8 +2591,6 @@ bool init()
 
 	if (window == NULL)
 		return false;
-    if(Mix_OpenAudio( 22050, MIX_DEFAULT_FORMAT, 2, 4096) == -1 )
-	    return false;
 
 	return true;
 }
@@ -3072,22 +2600,14 @@ bool loadFiles()
 {
 	EnemyMang.load();
 	TreasureChestMang.load();
-	DoorMang.load();
 	AIMang.load();
 
 	LevelMang.loadTextures();
 	LevelMang.initializeLevels();
 
 	//Initialize to home level
-	LevelMang.loadLevel(HOME_LEVEL);
+	LevelMang.loadLevel(LevelMang.LEVEL_ONE);
 
-	//load sounds
-    door = Mix_LoadWAV( "Media/Music/door.wav" );
-    ogre = Mix_LoadWAV( "Media/Music/ogre.wav" );
-    swing = Mix_LoadWAV( "Media/Music/swing.wav" );
-    clank = Mix_LoadWAV( "Media/Music/clank.wav" );
-	chest = Mix_LoadWAV("Media/Music/treasure.wav" );
-	
 	Player.load();
 	Player.init(start_x, start_y);
 
@@ -3127,7 +2647,7 @@ void cleanUp()
 
 void collisionManager()
 {
-	Player.movingCollision();
+	Player.checkCollision();
 }
 
 void update()
@@ -3142,8 +2662,6 @@ void update()
 
 	AIMang.update();
 
-	DoorMang.update();
-
 	setCamera(Player.getBox(), LevelWidth, LevelHeight);
 
 	//Reset the player's actionCheck
@@ -3157,7 +2675,6 @@ void draw()
 	SDL_RenderCopy(renderer, screen, NULL, NULL);
 
 	LevelMang.draw();
-	DoorMang.draw();
 	TreasureChestMang.draw();
 	AIMang.draw();
 	Player.show(Camera.x, Camera.y);
