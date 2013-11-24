@@ -527,6 +527,8 @@ public:
 	void drawStats();
 	void damage(int amount);
 	void cast(int amount);
+	void addHealth(int amount);
+	void addMana(int amount);
 
 	SDL_Texture* loadImage(const char *filename);
 };
@@ -1176,6 +1178,16 @@ void Character::damage(int amount)
 void Character::cast(int amount)
 {
 	mana -= amount;
+}
+
+void Character::addHealth(int amount)
+{
+	health += amount;
+}
+
+void Character::addMana(int amount)
+{
+	mana += amount;
 }
 #pragma endregion Character Class
 
@@ -2215,7 +2227,7 @@ AIManager AIMang;
 class TreasureChest
 {
 public:
-	typedef enum { NINJA_STARS } types;
+	typedef enum { NINJA_STARS, HEALTH_POTION, MANA_POTION } types;
 	typedef enum { OPEN, CLOSED } states;
 
 	TreasureChest();
@@ -2279,6 +2291,12 @@ void TreasureChest::setState(states state)
 		case NINJA_STARS:
 			Player.addNinjaStars(5);
 			break;
+		case HEALTH_POTION:
+			Player.addHealth(15);
+			break;
+		case MANA_POTION:
+			Player.addMana(15);
+			break;
 		}
 	}
 }
@@ -2317,7 +2335,7 @@ private:
 
 public:
 	void load();
-	void addChest(int x, int y, int type);
+	void addChest(int x, int y, TreasureChest::types type);
 	void update();
 	void draw();
 	void deleteAll();
@@ -2329,19 +2347,23 @@ void TreasureChestManager::load()
 	closed = loadImage("Media/treasure_closed.png");
 }
 
-void TreasureChestManager::addChest(int x, int y, int type)
+void TreasureChestManager::addChest(int x, int y, TreasureChest::types type)
 {
-	TreasureChest::types TYPE;
 	std::string STRING;
 	switch (type)
 	{
-	case 1:
-		TYPE = TreasureChest::NINJA_STARS;
+	case TreasureChest::NINJA_STARS:
 		STRING = "You found some ninja stars!";
+		break;
+	case TreasureChest::HEALTH_POTION:
+		STRING = "You found some health!";
+		break;
+	case TreasureChest::MANA_POTION:
+		STRING = "You found some  mana!";
 		break;
 	}
 
-	treasure_chests.push_back(TreasureChest(x, y, TYPE, STRING, open, closed));
+	treasure_chests.push_back(TreasureChest(x, y, type, STRING, open, closed));
 }
 
 void TreasureChestManager::update()
@@ -2510,7 +2532,7 @@ public:
 		MCH, //Main Character
 		SOR, GOB, //Enemies
 		WIZ, ROB, //AIs
-		TC1, //Treasure Chests
+		TCN, TCH, TCM, //Treasure Chests
 		DOR //Doorway
 	} textures;
 
@@ -2863,9 +2885,17 @@ void LevelManager::buildLevel(textures blueprint[], Tile *level_boxes[], int hei
 			level = NULL;
 			AIMang.addAI((i%width)*tex_width, (i/width)*tex_height, AI::ROBOT);
 			break;
-		case TC1:
+		case TCN:
 			level = NULL;
-			TreasureChestMang.addChest((i%width)*tex_width, (i/width)*tex_height, 1);
+			TreasureChestMang.addChest((i%width)*tex_width, (i/width)*tex_height, TreasureChest::NINJA_STARS);
+			break;
+		case TCH:
+			level = NULL;
+			TreasureChestMang.addChest((i%width)*tex_width, (i/width)*tex_height, TreasureChest::HEALTH_POTION);
+			break;
+		case TCM:
+			level = NULL;
+			TreasureChestMang.addChest((i%width)*tex_width, (i/width)*tex_height, TreasureChest::MANA_POTION);
 			break;
 		case DOR:
 			level = NULL;
@@ -3000,8 +3030,12 @@ LevelManager::textures LevelManager::stringToEnum(std::string enumString)
 		return WIZ;
 	else if (enumString == "ROB")
 		return ROB;
-	else if (enumString == "TC1")
-		return TC1;
+	else if (enumString == "TCN")
+		return TCN;
+	else if (enumString == "TCH")
+		return TCH;
+	else if (enumString == "TCM")
+		return TCM;
 	else if (enumString == "DOR")
 		return DOR;
 	else
@@ -3208,7 +3242,6 @@ int main( int argc, char* args[] )
 		}
 
 		update();
-
 		draw();
 
 		//Regulates frame rate
