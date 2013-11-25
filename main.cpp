@@ -1313,6 +1313,8 @@ public:
 	int getFireDamage();
 	void delFireball();
 
+	int lastSwoop;
+
 	void setState(states state);
 	int getState();
 
@@ -1608,11 +1610,7 @@ void Enemy::update()
 			if (box.y < start_height)
 			{
 				box.y = start_height;
-
-				if (state == RUNNING_LEFT)
-					setState(STANDING_LEFT);
-				else
-					setState(STANDING_RIGHT);
+				yvel = 0;
 			}
 
 			break;
@@ -1749,6 +1747,7 @@ void Enemy::setState(states state)
 			currentClip = 1;
 
 		xvel = 0;
+		lastSwoop = frame;
 	}
 	else if (state == JUMPING)
 		currentClip = 8;
@@ -1917,6 +1916,18 @@ void EnemyManager::update()
 					enemy->setState(Enemy::RUNNING_LEFT);
 			}
 			break;
+		case Enemy::BIRD:
+			if (enemy->getState() == Enemy::STANDING_LEFT || enemy->getState() == Enemy::STANDING_RIGHT)
+			{
+				int delta_x = player.x - enemy_box.x;
+				int delta_y = player.y - enemy_box.y;
+	
+				if (delta_x < 200 && delta_x > 0 && delta_y < 200 && delta_y > 0 && (frame-enemy->lastSwoop) > 120 && enemy->getState() != Enemy::RECOVER)
+					enemy->setState(Enemy::RUNNING_RIGHT);
+				else if (delta_x > -200 && delta_x < 0 && delta_y < 200 && delta_y > 0 && (frame-enemy->lastSwoop) > 120 && enemy->getState() != Enemy::RECOVER)
+					enemy->setState(Enemy::RUNNING_LEFT);
+			}
+			break;
 		}
 
 		collisionManager(enemy);
@@ -2027,7 +2038,8 @@ void EnemyManager::collisionManager(Enemy* enemy)
 					
 		Player.setXVel(enemy_box.x <= player.x ? 4 : -4);
 
-		enemy->setState(Enemy::RECOVER);
+		if (enemy->type != Enemy::BIRD)
+			enemy->setState(Enemy::RECOVER);
 
 		if (enemy_box.x < player.x)
 		{
