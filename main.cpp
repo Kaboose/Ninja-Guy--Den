@@ -2111,6 +2111,10 @@ bool EnemyManager::checkWeak(Enemy::types enemy, Spell::spell_type spell)
 		if (spell == Spell::ICE)
 			return true;
 		break;
+	case Enemy::BIRD:
+		if (spell == Spell::EARTH)
+			return true;
+		break;
 	}
 
 	return false;
