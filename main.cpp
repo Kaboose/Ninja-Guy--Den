@@ -22,7 +22,7 @@ typedef enum { PLAYING, AI_SPEAKING, PAUSE_MENU, MAIN_MENU } GAME_STATES;
 GAME_STATES GAME_STATE = MAIN_MENU;
 
 //Levels
-typedef enum { MENU_LEVEL, HOME_LEVEL, LEVEL_ONE, LEVEL_TWO, LEVEL_THREE } level_type;
+typedef enum { MENU_LEVEL, HOME_LEVEL, LEVEL_ONE } level_type;
 level_type current_level;
 
 //Used for determing where collisions are
@@ -58,6 +58,9 @@ Mix_Chunk *chest = NULL;
 Mix_Chunk *fire = NULL;
 Mix_Chunk *burr = NULL;
 Mix_Chunk *lizard = NULL;
+Mix_Chunk *ice = NULL;
+Mix_Chunk *earth = NULL;
+Mix_Chunk *air = NULL;
 
 //Read the LazyFoo tutorials to better understand
 SDL_Window* window = NULL;
@@ -264,7 +267,19 @@ public:
 
 void Spell::init(SDL_Texture* texture, int x, int y, float xvel, float yvel, SDL_RendererFlip flip, spell_type type, SDL_Rect* clip)
 {
-	Mix_PlayChannel(-1, fire, 0);
+
+	if(type == FIRE)
+	    Mix_PlayChannel(-1, fire, 0);
+	else if(type == WIND)
+		Mix_PlayChannel(-1, air, 0);
+	else if(type == ICE)
+		Mix_PlayChannel(-1, ice, 0);
+	else if(type == EARTH)
+	    Mix_PlayChannel(-1, earth, 0);
+
+
+
+
 	this->texture = texture;
 	this->xvel = xvel;
 	this->yvel = yvel;
@@ -290,98 +305,96 @@ void Spell::update()
 class Sword
 {
 public:
-        typedef enum { LEFT = SDL_FLIP_NONE, RIGHT = SDL_FLIP_HORIZONTAL } direction;
+	typedef enum { LEFT = SDL_FLIP_NONE, RIGHT = SDL_FLIP_HORIZONTAL } direction;
 
-        void init(SDL_Texture* texture, SDL_Rect box, SDL_RendererFlip flip);
-        void update(SDL_Rect player, SDL_RendererFlip flip);
-        void draw();
-        SDL_Rect getBox();
+	void init(SDL_Texture* texture, SDL_Rect box, SDL_RendererFlip flip);
+	void update(SDL_Rect player, SDL_RendererFlip flip);
+	void draw();
+	SDL_Rect getBox();
 
-        SDL_Texture* texture;
-        SDL_Rect box;
-        int angle;
-        int start;
+	SDL_Texture* texture;
+	SDL_Rect box;
+	int angle;
+	int start;
 
-        int leftAngles[3];
-        int rightAngles[3];
-        int index;
+	int leftAngles[3];
+	int rightAngles[3];
+	int index;
 
-        int damage;
+	int damage;
 
-        SDL_RendererFlip flip;
+	SDL_RendererFlip flip;
 
-        bool done;
-        bool notDamagedYet;
+	bool done;
 };
 
 void Sword::init(SDL_Texture* texture, SDL_Rect box, SDL_RendererFlip flip)
 {
-    Mix_PlayChannel( -1, swing, 0); 
-        notDamagedYet = true;
-        start = frame;
-        this->texture = texture;
-        this->flip = flip;
-        SDL_Rect temp = { box.x+box.w/2, box.y+box.h/2, 60, 10 };
-        if (flip == SDL_FLIP_NONE)
-                temp.x -= temp.w;
-        this->box = temp;
+	Mix_PlayChannel(-1, swing, 0);
+	start = frame;
+	this->texture = texture;
+	this->flip = flip;
+	SDL_Rect temp = { box.x+box.w/2, box.y+box.h/2, 60, 10 };
+	if (flip == SDL_FLIP_NONE)
+		temp.x -= temp.w;
+	this->box = temp;
 
-        index = 0;
-        leftAngles[0] = -300;
-        leftAngles[1] = -360;
-        leftAngles[2] = leftAngles[0];
+	index = 0;
+	leftAngles[0] = -300;
+	leftAngles[1] = -360;
+	leftAngles[2] = leftAngles[0];
 
-        rightAngles[0] = -60;
-        rightAngles[1] = 0;
-        rightAngles[2] = rightAngles[0];
+	rightAngles[0] = -60;
+	rightAngles[1] = 0;
+	rightAngles[2] = rightAngles[0];
 
-        if (flip == RIGHT)
-                angle = rightAngles[index];
-        else
-                angle = leftAngles[index];
+	if (flip == RIGHT)
+		angle = rightAngles[index];
+	else
+		angle = leftAngles[index];
 
-        done = false;
+	done = false;
 }
 
 void Sword::update(SDL_Rect player, SDL_RendererFlip flip)
 {
-        if ((frame+1 - start) % 10 == 0)
-        {
-                if (index < 2)
-                        index++;
-                else
-                        done = true;
-        }
+	if ((frame+1 - start) % 10 == 0)
+	{
+		if (index < 2)
+			index++;
+		else
+			done = true;
+	}
 
-        if (flip == RIGHT)
-                angle = rightAngles[index];
-        else
-                angle = leftAngles[index];
+	if (flip == RIGHT)
+		angle = rightAngles[index];
+	else
+		angle = leftAngles[index];
 
-        box.x = player.x + player.w/2;
-        box.y = player.y + player.h/2;
-        if (flip == SDL_FLIP_NONE)
-                box.x -= box.w;
+	box.x = player.x + player.w/2;
+	box.y = player.y + player.h/2;
+	if (flip == SDL_FLIP_NONE)
+		box.x -= box.w;
 
-        this->flip = flip;
+	this->flip = flip;
 }
 
 void Sword::draw()
 {
-        SDL_Rect destination = { box.x - Camera.x, box.y - Camera.y, box.w, box.h };
+	SDL_Rect destination = { box.x - Camera.x, box.y - Camera.y, box.w, box.h };
 
-        SDL_Point center = {0, destination.h/2};
-        if (flip == LEFT)
-        {
-                center.x = destination.w;
-        }
+	SDL_Point center = {0, destination.h/2};
+	if (flip == LEFT)
+	{
+		center.x = destination.w;
+	}
 
-        SDL_RenderCopyEx(renderer, texture, NULL, &destination, angle, &center, flip);
+	SDL_RenderCopyEx(renderer, texture, NULL, &destination, angle, &center, flip);
 }
 
 SDL_Rect Sword::getBox()
 {
-        return box;
+	return box;
 }
 #pragma endregion Sword Class
 #pragma endregion Weapons
@@ -481,7 +494,6 @@ private:
 	int lastSwing;
 	int lastA;
 	int lastD;
-	int invulnerableTimeLeft;
 
 	//These are for preventing conflicts: walking and jumping, walking two directions, jumping twice, etc
 	bool jumping;
@@ -496,7 +508,6 @@ private:
 	bool swinging;
 	bool casting;
 	bool actionCheck;
-	bool flashing;
 
 	//NinjaStar
 	NinjaStar ninja_star;
@@ -523,17 +534,13 @@ public:
 	void move(); //Moves the character
 	void handleInput(SDL_Event event); //Handles the input
 	void show(int x, int y); //Draws the character on the screen
-	void changeSwordState();
 
 	void save();
-	void load_player();
 
 	bool checkAction();
 	void resetActionCheck();
 	void movingCollision();
-	void makeInvulnerable();
 	bool collision[3];
-	bool invulnerable;
 
 	//Ninja star
 	void addNinjaStars(int amount);
@@ -607,7 +614,6 @@ Character::Character()
 	lastThrow = 0;
 	lastA = -30;
 	lastD = -30;
-	invulnerableTimeLeft = 0;
 
 	jumping = false;
 	falling = false;
@@ -621,8 +627,6 @@ Character::Character()
 	swinging = false;
 	casting = false;
 	actionCheck = false;
-	invulnerable = false;
-	flashing = false;
 
 	//Health/Mana
 	health = 100;
@@ -1026,34 +1030,12 @@ void Character::show(int x, int y)
 
 	SDL_Rect destination = { box.x - x, box.y - y, box.w, box.h };
 
-	 if (invulnerable && invulnerableTimeLeft > 0)
-     {
-		if (invulnerableTimeLeft % 5 == 0)
-			flashing = true;
-        else
-			flashing = false;
-
-        invulnerableTimeLeft--;
-     }
-     else
-     {
-		invulnerable = false;
-        flashing = false;
-     }
-
-     //LazyFoo** must pass in the renderer, texture, reference to the sprite (as a rectangle), and reference to the destination on the screen
-     if (flashing)
-		SDL_RenderCopy(renderer, NULL, &clip[currentClip], &destination);
-     else
-        SDL_RenderCopy(renderer, texture, &clip[currentClip], &destination);
+	//LazyFoo** must pass in the renderer, texture, reference to the sprite (as a rectangle), and reference to the destination on the screen
+	if (GAME_STATE != MAIN_MENU)
+		SDL_RenderCopy(renderer, texture, &clip[currentClip], &destination);
 
 	if (swinging)
 		sword.draw();
-}
-
-void Character::changeSwordState()
-{
-	sword.notDamagedYet = !sword.notDamagedYet;
 }
 
 void Character::save()
@@ -1061,31 +1043,6 @@ void Character::save()
 	save_game << magicCapacity << "\n";
 	for (int i = 0; i < magicCapacity; i++)
 		save_game << magicArray[i] << "\n";
-}
-
-void Character::load_player()
-{
-	load_game >> magicCapacity;
-	for (int i = 0; i < magicCapacity; i++)
-	{
-		int value;
-		load_game >> value;
-		switch (value)
-		{
-		case 0:
-			magicArray[i] = FIRE;
-			break;
-		case 1:
-			magicArray[i] = ICE;
-			break;
-		case 2:
-			magicArray[i] = EARTH;
-			break;
-		case 3:
-			magicArray[i] = WIND;
-			break;
-		}
-	}
 }
 
 bool Character::checkAction()
@@ -1096,12 +1053,6 @@ bool Character::checkAction()
 void Character::resetActionCheck()
 {
 	actionCheck = false;
-}
-
-void Character::makeInvulnerable()
-{
-	invulnerable = true;
-	invulnerableTimeLeft = 90;
 }
 
 void Character::movingCollision()
@@ -1278,15 +1229,11 @@ void Character::cast(int amount)
 void Character::addHealth(int amount)
 {
 	health += amount;
-	if (health >= 100)
-		health = 100;
 }
 
 void Character::addMana(int amount)
 {
 	mana += amount;
-	if (mana >= 100)
-		mana = 100;
 }
 #pragma endregion Character Class
 
@@ -1313,8 +1260,6 @@ public:
 	int getFireDamage();
 	void delFireball();
 
-	int lastSwoop;
-
 	void setState(states state);
 	int getState();
 
@@ -1336,7 +1281,6 @@ private:
 	int index;
 	int beginFrame;
 	int lastFired;
-	int start_height;
 
 	bool falling;
 	bool firing;
@@ -1459,33 +1403,6 @@ Enemy::Enemy(SDL_Texture *texture, int x, int y, types type)
 
 		fire = loadImage("Media/Objects/fireball.png");
 	}
-	else if (type == BIRD)
-	{
-		state = STANDING_LEFT;
-		X_VELOCITY = 6;
-		Y_VELOCITY = 1;
-		MAX_Y_VELOCITY = 10;
-	
-		index = 1;
-		angle = 0;
-		health = 10;
-	
-		int idle_width = 100, idle_height = 80;
-	
-		for (int i = 0; i < 4; i++)
-		{
-			clip[i].x = i*idle_width;
-			clip[i].y = 0;
-			clip[i].w = idle_width;
-			clip[i].h = idle_height;
-		}
-	
-		box.w = 100;
-		box.h = 80;
-		box.y = y-100;
-
-		currentClip = 0;
-	}
 	
 	this->texture = texture;
 	box.x = x;
@@ -1505,9 +1422,6 @@ Enemy::Enemy(SDL_Texture *texture, int x, int y, types type)
 
 void Enemy::update()
 {
-	if (type == BIRD)
-		falling = false;
-
 	if (state == STANDING_LEFT || state == STANDING_RIGHT || state == RECOVER)
 	{
 		if (type == GRIZZOLAR_BEAR || type == SMALL_ORC)
@@ -1532,27 +1446,6 @@ void Enemy::update()
 			xvel = 0;
 			if (state == RECOVER && (frame-beginFrame+1)%75 == 0)
 				setState(aggroState);
-		}
-
-		if (type == BIRD)
-		{
-			if ((frame-beginFrame) % 6 == 0)
-				currentClip += index;
-
-			if (currentClip > 3 || currentClip < 0)
-			{
-				index *= -1;
-				currentClip += index;
-			}
-	
-			xvel = 0;
-			yvel = 0;
-
-			
-	
-			if (state == RECOVER && (frame-beginFrame+1)%75 == 0)
-				setState(aggroState);
-
 		}
 	}
 
@@ -1595,24 +1488,6 @@ void Enemy::update()
 				lastFired = frame;
 				firing = true;
 			}
-			break;
-		case BIRD:
-			if ((frame-beginFrame) % 6 == 0)
-				currentClip += index;
-
-			if (currentClip > 3 || currentClip < 0)
-			{
-				index *= -1;
-				currentClip += index;
-			}
-
-			yvel -= Y_VELOCITY;
-			if (box.y < start_height)
-			{
-				box.y = start_height;
-				yvel = 0;
-			}
-
 			break;
 		}
 		if (state == RUNNING_LEFT)
@@ -1747,7 +1622,6 @@ void Enemy::setState(states state)
 			currentClip = 1;
 
 		xvel = 0;
-		lastSwoop = frame;
 	}
 	else if (state == JUMPING)
 		currentClip = 8;
@@ -1758,12 +1632,6 @@ void Enemy::setState(states state)
 		
 		if (type == LIZARD)
 			currentClip = 1;
-
-		if (type == BIRD)
-		{
-			start_height = box.y;
-			yvel = 15;
-		}
 	}
 
 	if (state == DEAD)
@@ -1836,7 +1704,6 @@ void EnemyManager::load()
 	small_orc_texture = loadImage("Media/Enemies/Small Orc.png");
 	grizzolar_bear_texture = loadImage("Media/Enemies/Grizzolar Bear.png");
 	lizard_texture = loadImage("Media/Enemies/Lizard.png");
-	bird_texture = loadImage("Media/Enemies/Bird.png");
 
 	fire = loadImage("Media/Objects/fireball.png");
 }
@@ -1856,8 +1723,6 @@ void EnemyManager::addEnemy(int x, int y, Enemy::types type)
 	case Enemy::LIZARD:
 		texture = lizard_texture;
 		break;
-	case Enemy::BIRD:
-		texture = bird_texture;
 	}
 
 	enemies.push_back(Enemy(texture, x, y, type));
@@ -1913,18 +1778,6 @@ void EnemyManager::update()
 				if (delta_x < 300 && delta_x > 0 && enemy->getState() != Enemy::RECOVER)
 					enemy->setState(Enemy::RUNNING_RIGHT);
 				else if (delta_x > -300 && delta_x < 0 && enemy->getState() != Enemy::RECOVER)
-					enemy->setState(Enemy::RUNNING_LEFT);
-			}
-			break;
-		case Enemy::BIRD:
-			if (enemy->getState() == Enemy::STANDING_LEFT || enemy->getState() == Enemy::STANDING_RIGHT)
-			{
-				int delta_x = player.x - enemy_box.x;
-				int delta_y = player.y - enemy_box.y;
-	
-				if (delta_x < 200 && delta_x > 0 && delta_y < 200 && delta_y > 0 && (frame-enemy->lastSwoop) > 120 && enemy->getState() != Enemy::RECOVER)
-					enemy->setState(Enemy::RUNNING_RIGHT);
-				else if (delta_x > -200 && delta_x < 0 && delta_y < 200 && delta_y > 0 && (frame-enemy->lastSwoop) > 120 && enemy->getState() != Enemy::RECOVER)
 					enemy->setState(Enemy::RUNNING_LEFT);
 			}
 			break;
@@ -2023,9 +1876,8 @@ void EnemyManager::collisionManager(Enemy* enemy)
 	}
 		
 	//Damage to player
-	if (!Player.invulnerable && checkCollision(player, enemy_box))
+	if (checkCollision(player, enemy_box))
 	{
-		Player.makeInvulnerable();
 		Player.damage(5);
 		if (Player.getYVel() > 0)
 		{
@@ -2038,8 +1890,7 @@ void EnemyManager::collisionManager(Enemy* enemy)
 					
 		Player.setXVel(enemy_box.x <= player.x ? 4 : -4);
 
-		if (enemy->type != Enemy::BIRD)
-			enemy->setState(Enemy::RECOVER);
+		enemy->setState(Enemy::RECOVER);
 
 		if (enemy_box.x < player.x)
 		{
@@ -2057,11 +1908,10 @@ void EnemyManager::collisionManager(Enemy* enemy)
 
 	if (enemy->type == Enemy::LIZARD)
 	{
-		if (!Player.invulnerable && checkCollision(enemy->getFireBox(), Player.getBox()))
+		if (checkCollision(enemy->getFireBox(), Player.getBox()))
 		{
 			Player.damage(5*enemy->getFireDamage());
 			enemy->delFireball();
-			Player.makeInvulnerable();
 		}
 	}
 
@@ -2121,10 +1971,6 @@ bool EnemyManager::checkWeak(Enemy::types enemy, Spell::spell_type spell)
 		break;
 	case Enemy::LIZARD:
 		if (spell == Spell::ICE)
-			return true;
-		break;
-	case Enemy::BIRD:
-		if (spell == Spell::EARTH)
 			return true;
 		break;
 	}
@@ -2209,19 +2055,13 @@ void Button::action()
 		save_game.open("SavedGame.txt");
 		Player.save();
 		save_game.close();
-		break;
 	case NEW:
 		GAME_STATE = PLAYING;
-		current_level = LEVEL_THREE; //!!!
-		break;
+		current_level = HOME_LEVEL;
 	case LOAD:
-		load_game.open("SavedGame.txt");
-		Player.load_player();
-		load_game.close();
-
+		// call load function here
 		GAME_STATE = PLAYING;
 		current_level = HOME_LEVEL;
-		break;
 	}
 }
 #pragma endregion Button Class
@@ -2575,7 +2415,7 @@ void AIManager::deleteAll()
 {
 	for (int i = 0; i < bots.size(); i++)
 	{
-		bots.erase(bots.begin());
+		bots.erase(bots.begin() + i);
 	}
 }
 #pragma endregion AIManager Class
@@ -2764,7 +2604,7 @@ void TreasureChestManager::deleteAll()
 {
 	for (int i = 0; i < treasure_chests.size(); i++)
 	{
-		treasure_chests.erase(treasure_chests.begin());
+		treasure_chests.erase(treasure_chests.begin() + i);
 	}
 }
 #pragma endregion TreasureChestManager Class
@@ -2879,7 +2719,7 @@ void DoorManager::deleteAll()
 {
 	for (int i = 0; i < doors.size(); i++)
 	{
-		doors.erase(doors.begin());
+		doors.erase(doors.begin() + i);
 	}
 }
 #pragma endregion DoorManager Class
@@ -2912,7 +2752,7 @@ public:
 		NON, //No texture
 
 		MCH, //Main Character
-		SOR, GOB, LIZ, BIR, //Enemies
+		SOR, GOB, LIZ, //Enemies
 		WIZ, ROB, //AIs
 		TCN, TCH, TCM, //Treasure Chests
 		DOR //Doorway
@@ -2945,7 +2785,7 @@ private:
 	Tile *home_level[780];
 	textures home_level_blueprint[780];
 
-	//Level One - Grass
+	//Level One
 	int levelone_texelw;
 	int levelone_texelh;
 	int levelone_level_width;
@@ -2964,26 +2804,6 @@ private:
 	SDL_Texture *levelmenu_level_background[2];
 	Tile *levelmenu_level[240];
 	textures levelmenu_level_blueprint[240];
-
-	//Level Two - Fire
-	int leveltwo_texelw;
-	int leveltwo_texelh;
-	int leveltwo_level_width;
-	int leveltwo_level_height;
-	int leveltwo_level_size;
-	SDL_Texture *leveltwo_level_background[2];
-	Tile *leveltwo_level[3540];
-	textures leveltwo_level_blueprint[3540];
-
-	//Level Three - Air
-	int levelthree_texelw;
-	int levelthree_texelh;
-	int levelthree_level_width;
-	int levelthree_level_height;
-	int levelthree_level_size;
-	SDL_Texture *levelthree_level_background[2];
-	Tile *levelthree_level[3540];
-	textures levelthree_level_blueprint[3120];
 
 #pragma region Textures
 	//Textures
@@ -3083,8 +2903,6 @@ private:
 
 	SDL_Texture *cat;
 	SDL_Texture *far_background;
-	SDL_Texture *fire_background;
-	SDL_Texture *air_background;
 	SDL_Texture *flare;
 	SDL_Texture *grass;
 	SDL_Texture *near_background;
@@ -3123,68 +2941,68 @@ void LevelManager::loadTextures()
 	wall_se5 = loadImage("Media/Walls/Wall 5 SE.png");
 	wall_sw5 = loadImage("Media/Walls/Wall 5 SW.png");
 
-	fire_wall_ne1 = loadImage("Media/Walls/Wall 1 NE fire.png");
-	fire_wall_nw1 = loadImage("Media/Walls/Wall 1 NW fire.png");
-	fire_wall_se1 = loadImage("Media/Walls/Wall 1 SE fire.png");
-	fire_wall_sw1 = loadImage("Media/Walls/Wall 1 SW fire.png");
-	fire_wall_ne2 = loadImage("Media/Walls/Wall 2 NE fire.png");
-	fire_wall_nw2 = loadImage("Media/Walls/Wall 2 NW fire.png");
-	fire_wall_se2 = loadImage("Media/Walls/Wall 2 SE fire.png");
-	fire_wall_sw2 = loadImage("Media/Walls/Wall 2 SW fire.png");
-	fire_wall_ne3 = loadImage("Media/Walls/Wall 3 NE fire.png");
-	fire_wall_nw3 = loadImage("Media/Walls/Wall 3 NW fire.png");
-	fire_wall_se3 = loadImage("Media/Walls/Wall 3 SE fire.png");
-	fire_wall_sw3 = loadImage("Media/Walls/Wall 3 SW fire.png");
-	fire_wall_ne4 = loadImage("Media/Walls/Wall 4 NE fire.png");
-	fire_wall_nw4 = loadImage("Media/Walls/Wall 4 NW fire.png");
-	fire_wall_se4 = loadImage("Media/Walls/Wall 4 SE fire.png");
-	fire_wall_sw4 = loadImage("Media/Walls/Wall 4 SW fire.png");
-	fire_wall_ne5 = loadImage("Media/Walls/Wall 5 NE fire.png");
-	fire_wall_nw5 = loadImage("Media/Walls/Wall 5 NW fire.png");
-	fire_wall_se5 = loadImage("Media/Walls/Wall 5 SE fire.png");
-	fire_wall_sw5 = loadImage("Media/Walls/Wall 5 SW fire.png");
+	fire_wall_ne1 = loadImage("Media/Walls/Wall 1 NE.png fire");
+	fire_wall_nw1 = loadImage("Media/Walls/Wall 1 NW.png fire");
+	fire_wall_se1 = loadImage("Media/Walls/Wall 1 SE.png fire");
+	fire_wall_sw1 = loadImage("Media/Walls/Wall 1 SW.png fire");
+	fire_wall_ne2 = loadImage("Media/Walls/Wall 2 NE.png fire");
+	fire_wall_nw2 = loadImage("Media/Walls/Wall 2 NW.png fire");
+	fire_wall_se2 = loadImage("Media/Walls/Wall 2 SE.png fire");
+	fire_wall_sw2 = loadImage("Media/Walls/Wall 2 SW.png fire");
+	fire_wall_ne3 = loadImage("Media/Walls/Wall 3 NE.png fire");
+	fire_wall_nw3 = loadImage("Media/Walls/Wall 3 NW.png fire");
+	fire_wall_se3 = loadImage("Media/Walls/Wall 3 SE.png fire");
+	fire_wall_sw3 = loadImage("Media/Walls/Wall 3 SW.png fire");
+	fire_wall_ne4 = loadImage("Media/Walls/Wall 4 NE.png fire");
+	fire_wall_nw4 = loadImage("Media/Walls/Wall 4 NW.png fire");
+	fire_wall_se4 = loadImage("Media/Walls/Wall 4 SE.png fire");
+	fire_wall_sw4 = loadImage("Media/Walls/Wall 4 SW.png fire");
+	fire_wall_ne5 = loadImage("Media/Walls/Wall 5 NE.png fire");
+	fire_wall_nw5 = loadImage("Media/Walls/Wall 5 NW.png fire");
+	fire_wall_se5 = loadImage("Media/Walls/Wall 5 SE.png fire");
+	fire_wall_sw5 = loadImage("Media/Walls/Wall 5 SW.png fire");
 
-	ice_wall_ne1 = loadImage("Media/Walls/Wall 1 NE ice.png");
-	ice_wall_nw1 = loadImage("Media/Walls/Wall 1 NW ice.png");
-	ice_wall_se1 = loadImage("Media/Walls/Wall 1 SE ice.png");
-	ice_wall_sw1 = loadImage("Media/Walls/Wall 1 SW ice.png");
-	ice_wall_ne2 = loadImage("Media/Walls/Wall 2 NE ice.png");
-	ice_wall_nw2 = loadImage("Media/Walls/Wall 2 NW ice.png");
-	ice_wall_se2 = loadImage("Media/Walls/Wall 2 SE ice.png");
-	ice_wall_sw2 = loadImage("Media/Walls/Wall 2 SW ice.png");
-	ice_wall_ne3 = loadImage("Media/Walls/Wall 3 NE ice.png");
-	ice_wall_nw3 = loadImage("Media/Walls/Wall 3 NW ice.png");
-	ice_wall_se3 = loadImage("Media/Walls/Wall 3 SE ice.png");
-	ice_wall_sw3 = loadImage("Media/Walls/Wall 3 SW ice.png");
-	ice_wall_ne4 = loadImage("Media/Walls/Wall 4 NE ice.png");
-	ice_wall_nw4 = loadImage("Media/Walls/Wall 4 NW ice.png");
-	ice_wall_se4 = loadImage("Media/Walls/Wall 4 SE ice.png");
-	ice_wall_sw4 = loadImage("Media/Walls/Wall 4 SW ice.png");
-	ice_wall_ne5 = loadImage("Media/Walls/Wall 5 NE ice.png");
-	ice_wall_nw5 = loadImage("Media/Walls/Wall 5 NW ice.png");
-	ice_wall_se5 = loadImage("Media/Walls/Wall 5 SE ice.png");
-	ice_wall_sw5 = loadImage("Media/Walls/Wall 5 SW ice.png");
+	ice_wall_ne1 = loadImage("Media/Walls/Wall 1 NE.png ice");
+	ice_wall_nw1 = loadImage("Media/Walls/Wall 1 NW.png ice");
+	ice_wall_se1 = loadImage("Media/Walls/Wall 1 SE.png ice");
+	ice_wall_sw1 = loadImage("Media/Walls/Wall 1 SW.png ice");
+	ice_wall_ne2 = loadImage("Media/Walls/Wall 2 NE.png ice");
+	ice_wall_nw2 = loadImage("Media/Walls/Wall 2 NW.png ice");
+	ice_wall_se2 = loadImage("Media/Walls/Wall 2 SE.png ice");
+	ice_wall_sw2 = loadImage("Media/Walls/Wall 2 SW.png ice");
+	ice_wall_ne3 = loadImage("Media/Walls/Wall 3 NE.png ice");
+	ice_wall_nw3 = loadImage("Media/Walls/Wall 3 NW.png ice");
+	ice_wall_se3 = loadImage("Media/Walls/Wall 3 SE.png ice");
+	ice_wall_sw3 = loadImage("Media/Walls/Wall 3 SW.png ice");
+	ice_wall_ne4 = loadImage("Media/Walls/Wall 4 NE.png ice");
+	ice_wall_nw4 = loadImage("Media/Walls/Wall 4 NW.png ice");
+	ice_wall_se4 = loadImage("Media/Walls/Wall 4 SE.png ice");
+	ice_wall_sw4 = loadImage("Media/Walls/Wall 4 SW.png ice");
+	ice_wall_ne5 = loadImage("Media/Walls/Wall 5 NE.png ice");
+	ice_wall_nw5 = loadImage("Media/Walls/Wall 5 NW.png ice");
+	ice_wall_se5 = loadImage("Media/Walls/Wall 5 SE.png ice");
+	ice_wall_sw5 = loadImage("Media/Walls/Wall 5 SW.png ice");
 
-	air_wall_ne1 = loadImage("Media/Walls/Wall 1 NE air.png");
-	air_wall_nw1 = loadImage("Media/Walls/Wall 1 NW air.png");
-	air_wall_se1 = loadImage("Media/Walls/Wall 1 SE air.png");
-	air_wall_sw1 = loadImage("Media/Walls/Wall 1 SW air.png");
-	air_wall_ne2 = loadImage("Media/Walls/Wall 2 NE air.png");
-	air_wall_nw2 = loadImage("Media/Walls/Wall 2 NW air.png");
-	air_wall_se2 = loadImage("Media/Walls/Wall 2 SE air.png");
-	air_wall_sw2 = loadImage("Media/Walls/Wall 2 SW air.png");
-	air_wall_ne3 = loadImage("Media/Walls/Wall 3 NE air.png");
-	air_wall_nw3 = loadImage("Media/Walls/Wall 3 NW air.png");
-	air_wall_se3 = loadImage("Media/Walls/Wall 3 SE air.png");
-	air_wall_sw3 = loadImage("Media/Walls/Wall 3 SW air.png");
-	air_wall_ne4 = loadImage("Media/Walls/Wall 4 NE air.png");
-	air_wall_nw4 = loadImage("Media/Walls/Wall 4 NW air.png");
-	air_wall_se4 = loadImage("Media/Walls/Wall 4 SE air.png");
-	air_wall_sw4 = loadImage("Media/Walls/Wall 4 SW air.png");
-	air_wall_ne5 = loadImage("Media/Walls/Wall 5 NE air.png");
-	air_wall_nw5 = loadImage("Media/Walls/Wall 5 NW air.png");
-	air_wall_se5 = loadImage("Media/Walls/Wall 5 SE air.png");
-	air_wall_sw5 = loadImage("Media/Walls/Wall 5 SW air.png");
+	air_wall_ne1 = loadImage("Media/Walls/Wall 1 NE.png air");
+	air_wall_nw1 = loadImage("Media/Walls/Wall 1 NW.png air");
+	air_wall_se1 = loadImage("Media/Walls/Wall 1 SE.png air");
+	air_wall_sw1 = loadImage("Media/Walls/Wall 1 SW.png air");
+	air_wall_ne2 = loadImage("Media/Walls/Wall 2 NE.png air");
+	air_wall_nw2 = loadImage("Media/Walls/Wall 2 NW.png air");
+	air_wall_se2 = loadImage("Media/Walls/Wall 2 SE.png air");
+	air_wall_sw2 = loadImage("Media/Walls/Wall 2 SW.png air");
+	air_wall_ne3 = loadImage("Media/Walls/Wall 3 NE.png air");
+	air_wall_nw3 = loadImage("Media/Walls/Wall 3 NW.png air");
+	air_wall_se3 = loadImage("Media/Walls/Wall 3 SE.png air");
+	air_wall_sw3 = loadImage("Media/Walls/Wall 3 SW.png air");
+	air_wall_ne4 = loadImage("Media/Walls/Wall 4 NE.png air");
+	air_wall_nw4 = loadImage("Media/Walls/Wall 4 NW.png air");
+	air_wall_se4 = loadImage("Media/Walls/Wall 4 SE.png air");
+	air_wall_sw4 = loadImage("Media/Walls/Wall 4 SW.png air");
+	air_wall_ne5 = loadImage("Media/Walls/Wall 5 NE.png air");
+	air_wall_nw5 = loadImage("Media/Walls/Wall 5 NW.png air");
+	air_wall_se5 = loadImage("Media/Walls/Wall 5 SE.png air");
+	air_wall_sw5 = loadImage("Media/Walls/Wall 5 SW.png air");
 
 	walk_w1 = loadImage("Media/Walkways/Walkway 1 W.png");
 	walk_e1 = loadImage("Media/Walkways/Walkway 1 E.png");
@@ -3198,8 +3016,6 @@ void LevelManager::loadTextures()
 
 	cat = loadImage("Media/Other/Cat's Eyes.png");
 	far_background = loadImage("Media/Other/Far Background.png");
-	fire_background = loadImage("Media/Other/fire background.png");
-	air_background = loadImage("Media/Other/air background.png");
 	flare = loadImage("Media/Other/Flare.png");
 	grass = loadImage("Media/Other/Grass.png");
 	near_background = loadImage("Media/Other/Near Background.png");
@@ -3251,7 +3067,7 @@ void LevelManager::initializeLevels()
 	home_level_background[1] = NULL;
 	loadLevelFromText("Media/Levels/levelhome.txt", HOME_LEVEL);
 
-	//level one - grass
+	//level one
 	levelone_texelw = 40;
 	levelone_texelh = 40;
 	levelone_level_width = 295;
@@ -3260,26 +3076,6 @@ void LevelManager::initializeLevels()
 	levelone_level_background[0] = far_background;
 	levelone_level_background[1] = NULL;
 	loadLevelFromText("Media/Levels/levelone.txt", LEVEL_ONE);
-
-	//level two - fire
-	leveltwo_texelw = 40;
-	leveltwo_texelh = 40;
-	leveltwo_level_width = 295;
-	leveltwo_level_height = 12;
-	leveltwo_level_size = leveltwo_level_width*leveltwo_level_height;
-	leveltwo_level_background[0] = fire_background;
-	leveltwo_level_background[1] = NULL;
-	loadLevelFromText("Media/Levels/leveltwo.txt", LEVEL_TWO);
-
-	//level three - air
-	levelthree_texelw = 40;
-	levelthree_texelh = 40;
-	levelthree_level_width = 260;
-	levelthree_level_height = 12;
-	levelthree_level_size = levelthree_level_width*levelthree_level_height;
-	levelthree_level_background[0] = air_background;
-	levelthree_level_background[1] = NULL;
-	loadLevelFromText("Media/Levels/levelthree.txt", LEVEL_THREE);
 
 	//main menu
 	levelmenu_texelw = 40;
@@ -3330,34 +3126,6 @@ void LevelManager::loadLevel(level_type level)
 		LevelSize = levelone_level_width*home_level_height;
 		Background = levelone_level_background;
 		music = Mix_LoadMUS( "Media/Music/level_two.wav" );
-		Mix_PlayMusic(music, -1);
-		break;
-
-	case LEVEL_TWO:
-		buildLevel(leveltwo_level_blueprint, leveltwo_level, leveltwo_level_height, leveltwo_level_width, leveltwo_texelw, leveltwo_texelh);
-
-		CurrentLevel = leveltwo_level;
-		texel_width = leveltwo_texelw;
-		texel_height = leveltwo_texelh;
-		LevelWidth = leveltwo_level_width*home_texelw;
-		LevelHeight = leveltwo_level_height*home_texelh;
-		LevelSize = leveltwo_level_width*home_level_height;
-		Background = leveltwo_level_background;
-		music = Mix_LoadMUS( "Media/Music/level_three.wav" );
-		Mix_PlayMusic(music, -1);
-		break;
-
-	case LEVEL_THREE:
-		buildLevel(levelthree_level_blueprint, levelthree_level, levelthree_level_height, levelthree_level_width, levelthree_texelw, levelthree_texelh);
-
-		CurrentLevel = levelthree_level;
-		texel_width = levelthree_texelw;
-		texel_height = levelthree_texelh;
-		LevelWidth = levelthree_level_width*home_texelw;
-		LevelHeight = levelthree_level_height*home_texelh;
-		LevelSize = levelthree_level_width*home_level_height;
-		Background = levelthree_level_background;
-		music = Mix_LoadMUS( "Media/Music/level_four.wav" );
 		Mix_PlayMusic(music, -1);
 		break;
 
@@ -3687,10 +3455,6 @@ void LevelManager::buildLevel(textures blueprint[], Tile *level_boxes[], int hei
 			level = NULL;
 			EnemyMang.addEnemy((i%width)*tex_width, (i/width)*tex_height, Enemy::LIZARD);
 			break;
-		case BIR:
-			level = NULL;
-			EnemyMang.addEnemy((i%width)*tex_width, (i/width)*tex_height, Enemy::BIRD);
-			break;
 		case WIZ:
 			level = NULL;
 			AIMang.addAI((i%width)*tex_width, (i/width)*tex_height, AI::WIZARD);
@@ -3761,10 +3525,6 @@ void LevelManager::loadLevelFromText(std::string filename, level_type level)
 				home_level_blueprint[numberOfTiles] = stringToEnum(tempEnum);
 			else if (level == LEVEL_ONE)
 				levelone_level_blueprint[numberOfTiles] = stringToEnum(tempEnum);
-			else if (level == LEVEL_TWO)
-				leveltwo_level_blueprint[numberOfTiles] = stringToEnum(tempEnum);
-			else if (level == LEVEL_THREE)
-				levelthree_level_blueprint[numberOfTiles] = stringToEnum(tempEnum);
 			else if (level == MENU_LEVEL)
 				levelmenu_level_blueprint[numberOfTiles] = stringToEnum(tempEnum);
 			tempEnum = "";
@@ -3968,8 +3728,6 @@ LevelManager::textures LevelManager::stringToEnum(std::string enumString)
 		return GOB;
 	else if (enumString == "LIZ")
 		return LIZ;
-	else if (enumString == "BIR")
-		return BIR;
 	else if (enumString == "WIZ")
 		return WIZ;
 	else if (enumString == "ROB")
@@ -4067,6 +3825,9 @@ bool loadFiles()
 	fire = Mix_LoadWAV("Media/Music/fire.wav");
 	burr = Mix_LoadWAV("Media/Music/burr.wav");
 	lizard = Mix_LoadWAV("Media/Music/burr.wav");
+	ice = Mix_LoadWAV("Media/Music/ice.wav");
+	air = Mix_LoadWAV("Media/Music/air.wav");
+	earth = Mix_LoadWAV("Media/Music/earth.wav");
 
 	textArea = loadImage("Media/Fonts/textbox.png");
 
@@ -4148,23 +3909,20 @@ void draw()
 	SDL_RenderCopy(renderer, screen, NULL, NULL);
 
 	LevelMang.draw();
+	DoorMang.draw();
+	TreasureChestMang.draw();
+	AIMang.draw();
+	Player.show(Camera.x, Camera.y);
+	EnemyMang.draw();
 
-	if (GAME_STATE == MAIN_MENU)
+	//Health is always last
+	Player.drawStats();
+
+	if (GAME_STATE == PAUSE_MENU)
+		PauseMenu.draw();
+
+	else if (GAME_STATE == MAIN_MENU)
 		MainMenu.draw();
-	else
-	{
-		DoorMang.draw();
-		TreasureChestMang.draw();
-		AIMang.draw();
-		Player.show(Camera.x, Camera.y);
-		EnemyMang.draw();
-
-		//Health is always last
-		Player.drawStats();
-
-		if (GAME_STATE == PAUSE_MENU)
-			PauseMenu.draw();
-	}
 
 	SDL_RenderPresent(renderer);
 }
@@ -4208,7 +3966,7 @@ int main( int argc, char* args[] )
 			//Quit options
 			if (event.type == SDL_KEYDOWN)
 			{
-				if (event.key.keysym.sym == SDLK_ESCAPE && GAME_STATE != MAIN_MENU)
+				if (event.key.keysym.sym == SDLK_ESCAPE)
 					GAME_STATE = PAUSE_MENU;
 			}
 			if (event.type == SDL_QUIT) //X's out the window
