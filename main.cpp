@@ -17,11 +17,11 @@ ofstream save_game;
 //Main quit variable
 bool quit = false;
 
-typedef enum { PLAYING, AI_SPEAKING, PAUSE_MENU } GAME_STATES;
-GAME_STATES GAME_STATE = PLAYING;
+typedef enum { PLAYING, AI_SPEAKING, PAUSE_MENU, MAIN_MENU } GAME_STATES;
+GAME_STATES GAME_STATE = MAIN_MENU;
 
 //Levels
-typedef enum { HOME_LEVEL, LEVEL_ONE } level_type;
+typedef enum { MENU_LEVEL, HOME_LEVEL, LEVEL_ONE } level_type;
 level_type current_level;
 
 //Used for determing where collisions are
@@ -999,7 +999,8 @@ void Character::show(int x, int y)
 	SDL_Rect destination = { box.x - x, box.y - y, box.w, box.h };
 
 	//LazyFoo** must pass in the renderer, texture, reference to the sprite (as a rectangle), and reference to the destination on the screen
-	SDL_RenderCopy(renderer, texture, &clip[currentClip], &destination);
+	if (GAME_STATE != MAIN_MENU)
+		SDL_RenderCopy(renderer, texture, &clip[currentClip], &destination);
 
 	if (swinging)
 		sword.draw();
@@ -1148,35 +1149,37 @@ Spell::spell_type Character::spellType()
 
 void Character::drawStats()
 {
-	//NinjaStar
-	SDL_Rect temp = { 10, 10, 30, 30 };
-	SDL_RenderCopy(renderer, ninja_star_texture, NULL, &temp);
-	SDL_Rect temp2 = { 45, 50, 15, 15 };
-	SDL_Texture* number = loadText("", numNinjaStars, scriptFont, &temp2);
-	SDL_RenderCopy(renderer, number, NULL, &temp2);
+	if (GAME_STATE != MAIN_MENU){
+		//NinjaStar
+		SDL_Rect temp = { 10, 10, 30, 30 };
+		SDL_RenderCopy(renderer, ninja_star_texture, NULL, &temp);
+		SDL_Rect temp2 = { 45, 50, 15, 15 };
+		SDL_Texture* number = loadText("", numNinjaStars, scriptFont, &temp2);
+		SDL_RenderCopy(renderer, number, NULL, &temp2);
 
-	//Health/Mana
-	SDL_RenderCopy(renderer, health_bar, NULL, &health_box);
-	SDL_RenderCopy(renderer, mana_bar, NULL, &mana_box);
+		//Health/Mana
+		SDL_RenderCopy(renderer, health_bar, NULL, &health_box);
+		SDL_RenderCopy(renderer, mana_bar, NULL, &mana_box);
 
-	//Magic
-	if (magicCapacity > 0)
-	{
-		SDL_Rect magic_destination = { 60, 10, 30, 30 };
-		switch (magicArray[magicIndex])
+		//Magic
+		if (magicCapacity > 0)
 		{
-		case FIRE:
-			SDL_RenderCopy(renderer, fire, NULL, &magic_destination);
-			break;
-		case ICE:
-			SDL_RenderCopy(renderer, ice, NULL, &magic_destination);
-			break;
-		case EARTH:
-			SDL_RenderCopy(renderer, rock, NULL, &magic_destination);
-			break;
-		case WIND:
-			SDL_RenderCopy(renderer, magic, &tornadoClip, &magic_destination);
-			break;
+			SDL_Rect magic_destination = { 60, 10, 30, 30 };
+			switch (magicArray[magicIndex])
+			{
+			case FIRE:
+				SDL_RenderCopy(renderer, fire, NULL, &magic_destination);
+				break;
+			case ICE:
+				SDL_RenderCopy(renderer, ice, NULL, &magic_destination);
+				break;
+			case EARTH:
+				SDL_RenderCopy(renderer, rock, NULL, &magic_destination);
+				break;
+			case WIND:
+				SDL_RenderCopy(renderer, magic, &tornadoClip, &magic_destination);
+				break;
+			}
 		}
 	}
 }
@@ -1958,7 +1961,7 @@ EnemyManager EnemyMang;
 class Button
 {
 public:
-	typedef enum { EXIT, RESUME, SAVE } types;
+	typedef enum { EXIT, RESUME, SAVE, NEW, LOAD } types;
 
 	Button(std::string STRING, types type);
 	void loadButton(int x, int y);
@@ -2014,6 +2017,13 @@ void Button::action()
 		save_game.open("SavedGame.txt");
 		Player.save();
 		save_game.close();
+	case NEW:
+		GAME_STATE = PLAYING;
+		current_level = HOME_LEVEL;
+	case LOAD:
+		// call load function here
+		GAME_STATE = PLAYING;
+		current_level = HOME_LEVEL;
 	}
 }
 #pragma endregion Button Class
@@ -2086,6 +2096,12 @@ Menu PauseMenu;
 Button ExitButton("Exit", Button::EXIT);
 Button ResumeButton("Resume", Button::RESUME);
 Button SaveButton("Save", Button::SAVE);
+
+//Main Menu
+Menu MainMenu;
+Button NewButton ("New Game", Button::NEW);
+Button LoadButton ("Load Game", Button::LOAD);
+Button QuitButton("Quit", Button::EXIT);
 
 
 //AI Class and Functions
@@ -2686,6 +2702,9 @@ class LevelManager
 public:
 	typedef enum { NE1, NW1, SE1, SW1, NE2, NW2, SE2, SW2, NE3, NW3, SE3, SW3, NE4, NW4, SE4, SW4, NE5, NW5, SE5, SW5, //Walls
 		WE1, WW1, WE2, WW2, //Walkways
+		FN1, FW1, FE1, FS1, FN2, FW2, FE2, FS2, FN3, FW3, FE3, FS3, FN4, FW4, FE4, FS4, FN5, FW5, FE5, FS5,//Fire Walkways
+		IN1, IW1, IE1, IS1, IN2, IW2, IE2, IS2, IN3, IW3, IE3, IS3, IN4, IW4, IE4, IS4, IN5, IW5, IE5, IS5, // Ice Walkways
+		AN1, AW1, AE1, AS1, AN2, AW2, AE2, AS2, AN3, AW3, AE3, AS3, AN4, AW4, AE4, AS4, AN5, AW5, AE5, AS5, // Air Walkways
 		TN1, TS1, TN2, TS2, //Totems
 		CES, FBG, FLA, GRA, NBG, ROT, //Cat's Eyes, Far Background, Flare, Grass, Nearbackground, Roots
 		NON, //No texture
@@ -2734,6 +2753,16 @@ private:
 	Tile *levelone_level[3540];
 	textures levelone_level_blueprint[3540];
 
+	//Main Menu
+	int levelmenu_texelw;
+	int levelmenu_texelh;
+	int levelmenu_level_width;
+	int levelmenu_level_height;
+	int levelmenu_level_size;
+	SDL_Texture *levelmenu_level_background[2];
+	Tile *levelmenu_level[240];
+	textures levelmenu_level_blueprint[240];
+
 #pragma region Textures
 	//Textures
 	SDL_Texture *wall_ne1;
@@ -2757,6 +2786,69 @@ private:
 	SDL_Texture *wall_se5;
 	SDL_Texture *wall_sw5;
 
+	SDL_Texture *fire_wall_ne1;
+	SDL_Texture *fire_wall_nw1;
+	SDL_Texture *fire_wall_se1;
+	SDL_Texture *fire_wall_sw1;
+	SDL_Texture *fire_wall_ne2;
+	SDL_Texture *fire_wall_nw2;
+	SDL_Texture *fire_wall_se2;
+	SDL_Texture *fire_wall_sw2;
+	SDL_Texture *fire_wall_ne3;
+	SDL_Texture *fire_wall_nw3;
+	SDL_Texture *fire_wall_se3;
+	SDL_Texture *fire_wall_sw3;
+	SDL_Texture *fire_wall_ne4;
+	SDL_Texture *fire_wall_nw4;
+	SDL_Texture *fire_wall_se4;
+	SDL_Texture *fire_wall_sw4;
+	SDL_Texture *fire_wall_ne5;
+	SDL_Texture *fire_wall_nw5;
+	SDL_Texture *fire_wall_se5;
+	SDL_Texture *fire_wall_sw5;
+
+	SDL_Texture *ice_wall_ne1;
+	SDL_Texture *ice_wall_nw1;
+	SDL_Texture *ice_wall_se1;
+	SDL_Texture *ice_wall_sw1;
+	SDL_Texture *ice_wall_ne2;
+	SDL_Texture *ice_wall_nw2;
+	SDL_Texture *ice_wall_se2;
+	SDL_Texture *ice_wall_sw2;
+	SDL_Texture *ice_wall_ne3;
+	SDL_Texture *ice_wall_nw3;
+	SDL_Texture *ice_wall_se3;
+	SDL_Texture *ice_wall_sw3;
+	SDL_Texture *ice_wall_ne4;
+	SDL_Texture *ice_wall_nw4;
+	SDL_Texture *ice_wall_se4;
+	SDL_Texture *ice_wall_sw4;
+	SDL_Texture *ice_wall_ne5;
+	SDL_Texture *ice_wall_nw5;
+	SDL_Texture *ice_wall_se5;
+	SDL_Texture *ice_wall_sw5;
+
+	SDL_Texture *air_wall_ne1;
+	SDL_Texture *air_wall_nw1;
+	SDL_Texture *air_wall_se1;
+	SDL_Texture *air_wall_sw1;
+	SDL_Texture *air_wall_ne2;
+	SDL_Texture *air_wall_nw2;
+	SDL_Texture *air_wall_se2;
+	SDL_Texture *air_wall_sw2;
+	SDL_Texture *air_wall_ne3;
+	SDL_Texture *air_wall_nw3;
+	SDL_Texture *air_wall_se3;
+	SDL_Texture *air_wall_sw3;
+	SDL_Texture *air_wall_ne4;
+	SDL_Texture *air_wall_nw4;
+	SDL_Texture *air_wall_se4;
+	SDL_Texture *air_wall_sw4;
+	SDL_Texture *air_wall_ne5;
+	SDL_Texture *air_wall_nw5;
+	SDL_Texture *air_wall_se5;
+	SDL_Texture *air_wall_sw5;
+
 	SDL_Texture *walk_w1;
 	SDL_Texture *walk_e1;
 	SDL_Texture *walk_w2;
@@ -2773,6 +2865,9 @@ private:
 	SDL_Texture *grass;
 	SDL_Texture *near_background;
 	SDL_Texture *roots;
+
+	SDL_Texture *title_screen;
+
 #pragma endregion Texture Declarations
 
 	void buildLevel(textures blueprint[], Tile *level_boxes[], int height, int width, int tex_width, int tex_height);
@@ -2804,6 +2899,69 @@ void LevelManager::loadTextures()
 	wall_se5 = loadImage("Media/Walls/Wall 5 SE.png");
 	wall_sw5 = loadImage("Media/Walls/Wall 5 SW.png");
 
+	fire_wall_ne1 = loadImage("Media/Walls/Wall 1 NE.png fire");
+	fire_wall_nw1 = loadImage("Media/Walls/Wall 1 NW.png fire");
+	fire_wall_se1 = loadImage("Media/Walls/Wall 1 SE.png fire");
+	fire_wall_sw1 = loadImage("Media/Walls/Wall 1 SW.png fire");
+	fire_wall_ne2 = loadImage("Media/Walls/Wall 2 NE.png fire");
+	fire_wall_nw2 = loadImage("Media/Walls/Wall 2 NW.png fire");
+	fire_wall_se2 = loadImage("Media/Walls/Wall 2 SE.png fire");
+	fire_wall_sw2 = loadImage("Media/Walls/Wall 2 SW.png fire");
+	fire_wall_ne3 = loadImage("Media/Walls/Wall 3 NE.png fire");
+	fire_wall_nw3 = loadImage("Media/Walls/Wall 3 NW.png fire");
+	fire_wall_se3 = loadImage("Media/Walls/Wall 3 SE.png fire");
+	fire_wall_sw3 = loadImage("Media/Walls/Wall 3 SW.png fire");
+	fire_wall_ne4 = loadImage("Media/Walls/Wall 4 NE.png fire");
+	fire_wall_nw4 = loadImage("Media/Walls/Wall 4 NW.png fire");
+	fire_wall_se4 = loadImage("Media/Walls/Wall 4 SE.png fire");
+	fire_wall_sw4 = loadImage("Media/Walls/Wall 4 SW.png fire");
+	fire_wall_ne5 = loadImage("Media/Walls/Wall 5 NE.png fire");
+	fire_wall_nw5 = loadImage("Media/Walls/Wall 5 NW.png fire");
+	fire_wall_se5 = loadImage("Media/Walls/Wall 5 SE.png fire");
+	fire_wall_sw5 = loadImage("Media/Walls/Wall 5 SW.png fire");
+
+	ice_wall_ne1 = loadImage("Media/Walls/Wall 1 NE.png ice");
+	ice_wall_nw1 = loadImage("Media/Walls/Wall 1 NW.png ice");
+	ice_wall_se1 = loadImage("Media/Walls/Wall 1 SE.png ice");
+	ice_wall_sw1 = loadImage("Media/Walls/Wall 1 SW.png ice");
+	ice_wall_ne2 = loadImage("Media/Walls/Wall 2 NE.png ice");
+	ice_wall_nw2 = loadImage("Media/Walls/Wall 2 NW.png ice");
+	ice_wall_se2 = loadImage("Media/Walls/Wall 2 SE.png ice");
+	ice_wall_sw2 = loadImage("Media/Walls/Wall 2 SW.png ice");
+	ice_wall_ne3 = loadImage("Media/Walls/Wall 3 NE.png ice");
+	ice_wall_nw3 = loadImage("Media/Walls/Wall 3 NW.png ice");
+	ice_wall_se3 = loadImage("Media/Walls/Wall 3 SE.png ice");
+	ice_wall_sw3 = loadImage("Media/Walls/Wall 3 SW.png ice");
+	ice_wall_ne4 = loadImage("Media/Walls/Wall 4 NE.png ice");
+	ice_wall_nw4 = loadImage("Media/Walls/Wall 4 NW.png ice");
+	ice_wall_se4 = loadImage("Media/Walls/Wall 4 SE.png ice");
+	ice_wall_sw4 = loadImage("Media/Walls/Wall 4 SW.png ice");
+	ice_wall_ne5 = loadImage("Media/Walls/Wall 5 NE.png ice");
+	ice_wall_nw5 = loadImage("Media/Walls/Wall 5 NW.png ice");
+	ice_wall_se5 = loadImage("Media/Walls/Wall 5 SE.png ice");
+	ice_wall_sw5 = loadImage("Media/Walls/Wall 5 SW.png ice");
+
+	air_wall_ne1 = loadImage("Media/Walls/Wall 1 NE.png air");
+	air_wall_nw1 = loadImage("Media/Walls/Wall 1 NW.png air");
+	air_wall_se1 = loadImage("Media/Walls/Wall 1 SE.png air");
+	air_wall_sw1 = loadImage("Media/Walls/Wall 1 SW.png air");
+	air_wall_ne2 = loadImage("Media/Walls/Wall 2 NE.png air");
+	air_wall_nw2 = loadImage("Media/Walls/Wall 2 NW.png air");
+	air_wall_se2 = loadImage("Media/Walls/Wall 2 SE.png air");
+	air_wall_sw2 = loadImage("Media/Walls/Wall 2 SW.png air");
+	air_wall_ne3 = loadImage("Media/Walls/Wall 3 NE.png air");
+	air_wall_nw3 = loadImage("Media/Walls/Wall 3 NW.png air");
+	air_wall_se3 = loadImage("Media/Walls/Wall 3 SE.png air");
+	air_wall_sw3 = loadImage("Media/Walls/Wall 3 SW.png air");
+	air_wall_ne4 = loadImage("Media/Walls/Wall 4 NE.png air");
+	air_wall_nw4 = loadImage("Media/Walls/Wall 4 NW.png air");
+	air_wall_se4 = loadImage("Media/Walls/Wall 4 SE.png air");
+	air_wall_sw4 = loadImage("Media/Walls/Wall 4 SW.png air");
+	air_wall_ne5 = loadImage("Media/Walls/Wall 5 NE.png air");
+	air_wall_nw5 = loadImage("Media/Walls/Wall 5 NW.png air");
+	air_wall_se5 = loadImage("Media/Walls/Wall 5 SE.png air");
+	air_wall_sw5 = loadImage("Media/Walls/Wall 5 SW.png air");
+
 	walk_w1 = loadImage("Media/Walkways/Walkway 1 W.png");
 	walk_e1 = loadImage("Media/Walkways/Walkway 1 E.png");
 	walk_w2 = loadImage("Media/Walkways/Walkway 2 W.png");
@@ -2820,6 +2978,9 @@ void LevelManager::loadTextures()
 	grass = loadImage("Media/Other/Grass.png");
 	near_background = loadImage("Media/Other/Near Background.png");
 	roots = loadImage("Media/Other/Roots.png");
+
+	title_screen = loadImage("Media/mainmenu.png");
+
 #pragma endregion Texture Loading
 }
 
@@ -2873,6 +3034,17 @@ void LevelManager::initializeLevels()
 	levelone_level_background[0] = far_background;
 	levelone_level_background[1] = NULL;
 	loadLevelFromText("Media/Levels/levelone.txt", LEVEL_ONE);
+
+	//main menu
+	levelmenu_texelw = 40;
+	levelmenu_texelh = 40;
+	levelmenu_level_width = 20;
+	levelmenu_level_height = 12;
+	levelmenu_level_size = levelmenu_level_width*levelmenu_level_height;
+	levelmenu_level_background[0] = title_screen; 
+	levelmenu_level_background[1] = NULL;
+	loadLevelFromText("Media/Levels/levelmenu.txt", MENU_LEVEL);
+
 }
 
 void LevelManager::loadLevel(level_type level)
@@ -2898,6 +3070,7 @@ void LevelManager::loadLevel(level_type level)
 		LevelSize = home_level_width*home_level_height;
 		Background = home_level_background;
 		break;
+
 	case LEVEL_ONE:
 		buildLevel(levelone_level_blueprint, levelone_level, levelone_level_height, levelone_level_width, levelone_texelw, levelone_texelh);
 
@@ -2908,6 +3081,18 @@ void LevelManager::loadLevel(level_type level)
 		LevelHeight = levelone_level_height*home_texelh;
 		LevelSize = levelone_level_width*home_level_height;
 		Background = levelone_level_background;
+		break;
+
+	case MENU_LEVEL:
+		buildLevel(levelmenu_level_blueprint, levelmenu_level, levelmenu_level_height, levelmenu_level_width, levelmenu_texelw, levelmenu_texelh);
+
+		CurrentLevel = levelmenu_level;
+		texel_width = levelmenu_texelw;
+		texel_height = levelmenu_texelh;
+		LevelWidth = levelmenu_level_width*home_texelw;
+		LevelHeight = levelmenu_level_height*home_texelh;
+		LevelSize = levelmenu_level_width*home_level_height;
+		Background = levelmenu_level_background;
 		break;
 	}
 
@@ -2984,6 +3169,186 @@ void LevelManager::buildLevel(textures blueprint[], Tile *level_boxes[], int hei
 			break;
 		case SW5:
 			level = wall_sw5;
+			break;
+		case FN1:
+			level = fire_wall_ne1;
+			break;
+		case FW1:
+			level = fire_wall_nw1;
+			break;
+		case FE1:
+			level = fire_wall_se1;
+			break;
+		case FS1:
+			level = fire_wall_sw1;
+			break;
+		case FN2:
+			level = fire_wall_ne2;
+			break;
+		case FW2:
+			level = fire_wall_nw2;
+			break;
+		case FE2:
+			level = fire_wall_se2;
+			break;
+		case FS2:
+			level = fire_wall_sw2;
+			break;
+		case FN3:
+			level = fire_wall_ne3;
+			break;
+		case FW3:
+			level = fire_wall_nw3;
+			break;
+		case FE3:
+			level = fire_wall_se3;
+			break;
+		case FS3:
+			level = fire_wall_sw3;
+			break;
+		case FN4:
+			level = fire_wall_ne4;
+			break;
+		case FW4:
+			level = fire_wall_nw4;
+			break;
+		case FE4:
+			level = fire_wall_se4;
+			break;
+		case FS4:
+			level = fire_wall_sw4;
+			break;
+		case FN5:
+			level = fire_wall_ne5;
+			break;
+		case FW5:
+			level = fire_wall_nw5;
+			break;
+		case FE5:
+			level = fire_wall_se5;
+			break;
+		case FS5:
+			level = fire_wall_sw5;
+			break;
+		case IN1:
+			level = ice_wall_ne1;
+			break;
+		case IW1:
+			level = ice_wall_nw1;
+			break;
+		case IE1:
+			level = ice_wall_se1;
+			break;
+		case IS1:
+			level = ice_wall_sw1;
+			break;
+		case IN2:
+			level = ice_wall_ne2;
+			break;
+		case IW2:
+			level = ice_wall_nw2;
+			break;
+		case IE2:
+			level = ice_wall_se2;
+			break;
+		case IS2:
+			level = ice_wall_sw2;
+			break;
+		case IN3:
+			level = ice_wall_ne3;
+			break;
+		case IW3:
+			level = ice_wall_nw3;
+			break;
+		case IE3:
+			level = ice_wall_se3;
+			break;
+		case IS3:
+			level = ice_wall_sw3;
+			break;
+		case IN4:
+			level = ice_wall_ne4;
+			break;
+		case IW4:
+			level = ice_wall_nw4;
+			break;
+		case IE4:
+			level = ice_wall_se4;
+			break;
+		case IS4:
+			level = ice_wall_sw4;
+			break;
+		case IN5:
+			level = ice_wall_ne5;
+			break;
+		case IW5:
+			level = ice_wall_nw5;
+			break;
+		case IE5:
+			level = ice_wall_se5;
+			break;
+		case IS5:
+			level = ice_wall_sw5;
+			break;
+		case AN1:
+			level = air_wall_ne1;
+			break;
+		case AW1:
+			level = air_wall_nw1;
+			break;
+		case AE1:
+			level = air_wall_se1;
+			break;
+		case AS1:
+			level = air_wall_sw1;
+			break;
+		case AN2:
+			level = air_wall_ne2;
+			break;
+		case AW2:
+			level = air_wall_nw2;
+			break;
+		case AE2:
+			level = air_wall_se2;
+			break;
+		case AS2:
+			level = air_wall_sw2;
+			break;
+		case AN3:
+			level = air_wall_ne3;
+			break;
+		case AW3:
+			level = air_wall_nw3;
+			break;
+		case AE3:
+			level = air_wall_se3;
+			break;
+		case AS3:
+			level = air_wall_sw3;
+			break;
+		case AN4:
+			level = air_wall_ne4;
+			break;
+		case AW4:
+			level = air_wall_nw4;
+			break;
+		case AE4:
+			level = air_wall_se4;
+			break;
+		case AS4:
+			level = air_wall_sw4;
+			break;
+		case AN5:
+			level = air_wall_ne5;
+			break;
+		case AW5:
+			level = air_wall_nw5;
+			break;
+		case AE5:
+			level = air_wall_se5;
+			break;
+		case AS5:
+			level = air_wall_sw5;
 			break;
 		case WE1:
 			level = walk_e1;
@@ -3112,6 +3477,8 @@ void LevelManager::loadLevelFromText(std::string filename, level_type level)
 				home_level_blueprint[numberOfTiles] = stringToEnum(tempEnum);
 			else if (level == LEVEL_ONE)
 				levelone_level_blueprint[numberOfTiles] = stringToEnum(tempEnum);
+			else if (level == MENU_LEVEL)
+				levelmenu_level_blueprint[numberOfTiles] = stringToEnum(tempEnum);
 			tempEnum = "";
 			numberOfTiles++;
 			ifile.get();
@@ -3163,6 +3530,126 @@ LevelManager::textures LevelManager::stringToEnum(std::string enumString)
 		return SE5;
 	else if (enumString == "SW5")
 		return SW5;
+	else if (enumString == "FN1")
+		return FN1;
+	else if (enumString == "FW1")
+		return FW1;
+	else if (enumString == "FE1")
+		return FE1;
+	else if (enumString == "FS1")
+		return FS1;
+	else if (enumString == "FN2")
+		return FN2;
+	else if (enumString == "FW2")
+		return FW2;
+	else if (enumString == "FE2")
+		return FE2;
+	else if (enumString == "FS2")
+		return FS2;
+	else if (enumString == "FN3")
+		return FN3;
+	else if (enumString == "FW3")
+		return FW3;
+	else if (enumString == "FE3")
+		return FE3;
+	else if (enumString == "FS3")
+		return FS3;
+	else if (enumString == "FN4")
+		return FN4;
+	else if (enumString == "FW4")
+		return FW4;
+	else if (enumString == "FE4")
+		return FE4;
+	else if (enumString == "FS4")
+		return FS4;
+	else if (enumString == "FN5")
+		return FN5;
+	else if (enumString == "FW5")
+		return FW5;
+	else if (enumString == "FE5")
+		return FE5;
+	else if (enumString == "FS5")
+		return FS5;
+	else if (enumString == "IN1")
+		return IN1;
+	else if (enumString == "IW1")
+		return IW1;
+	else if (enumString == "IE1")
+		return IE1;
+	else if (enumString == "IS1")
+		return IS1;
+	else if (enumString == "IN2")
+		return IN2;
+	else if (enumString == "IW2")
+		return IW2;
+	else if (enumString == "IE2")
+		return IE2;
+	else if (enumString == "IS2")
+		return IS2;
+	else if (enumString == "IN3")
+		return IN3;
+	else if (enumString == "IW3")
+		return IW3;
+	else if (enumString == "IE3")
+		return IE3;
+	else if (enumString == "IS3")
+		return IS3;
+	else if (enumString == "IN4")
+		return IN4;
+	else if (enumString == "IW4")
+		return IW4;
+	else if (enumString == "IE4")
+		return IE4;
+	else if (enumString == "IS4")
+		return IS4;
+	else if (enumString == "IN5")
+		return IN5;
+	else if (enumString == "IW5")
+		return IW5;
+	else if (enumString == "IE5")
+		return IE5;
+	else if (enumString == "IS5")
+		return IS5;
+	else if (enumString == "AN1")
+		return AN1;
+	else if (enumString == "AW1")
+		return AW1;
+	else if (enumString == "AE1")
+		return AE1;
+	else if (enumString == "AS1")
+		return AS1;
+	else if (enumString == "AN2")
+		return AN2;
+	else if (enumString == "AW2")
+		return AW2;
+	else if (enumString == "AE2")
+		return AE2;
+	else if (enumString == "AS2")
+		return AS2;
+	else if (enumString == "AN3")
+		return AN3;
+	else if (enumString == "AW3")
+		return AW3;
+	else if (enumString == "AE3")
+		return AE3;
+	else if (enumString == "AS3")
+		return AS3;
+	else if (enumString == "AN4")
+		return AN4;
+	else if (enumString == "AW4")
+		return AW4;
+	else if (enumString == "AE4")
+		return AE4;
+	else if (enumString == "AS4")
+		return AS4;
+	else if (enumString == "AN5")
+		return AN5;
+	else if (enumString == "AW5")
+		return AW5;
+	else if (enumString == "AE5")
+		return AE5;
+	else if (enumString == "AS5")
+		return AS5;
 	else if (enumString == "WE1")
 		return WE1;
 	else if (enumString == "WW1")
@@ -3274,7 +3761,7 @@ bool loadFiles()
 	LevelMang.initializeLevels();
 
 	//Initialize to home level
-	LevelMang.loadLevel(HOME_LEVEL);
+	LevelMang.loadLevel(MENU_LEVEL);
 
 	Player.load();
 	Player.init(start_x, start_y);
@@ -3287,6 +3774,13 @@ bool loadFiles()
 	PauseMenu.addButton(ExitButton);
 	PauseMenu.addButton(SaveButton);
 	PauseMenu.addButton(ResumeButton);
+	
+	NewButton.loadButton(SCREEN_WIDTH/2, SCREEN_HEIGHT/2 +70);
+	LoadButton.loadButton(SCREEN_WIDTH/2, SCREEN_HEIGHT/2 + 120);
+	QuitButton.loadButton(SCREEN_WIDTH/2, SCREEN_HEIGHT/2 + 170);
+	MainMenu.addButton(NewButton);
+	MainMenu.addButton(LoadButton);
+	MainMenu.addButton(QuitButton);
 
 	return true;
 }
@@ -3364,6 +3858,9 @@ void draw()
 	if (GAME_STATE == PAUSE_MENU)
 		PauseMenu.draw();
 
+	else if (GAME_STATE == MAIN_MENU)
+		MainMenu.draw();
+
 	SDL_RenderPresent(renderer);
 }
 #pragma endregion Main Functions
@@ -3398,6 +3895,9 @@ int main( int argc, char* args[] )
 			case PAUSE_MENU:
 				PauseMenu.update(event);
 				break;
+			case MAIN_MENU:
+				MainMenu.update(event);
+				break;
 			}
 
 			//Quit options
@@ -3412,7 +3912,7 @@ int main( int argc, char* args[] )
 
 		if (GAME_STATE == PLAYING)
 			update();
-		draw();
+		draw(); 
 
 		//Regulates frame rate
 		frame++;
