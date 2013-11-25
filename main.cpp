@@ -22,7 +22,7 @@ typedef enum { PLAYING, AI_SPEAKING, PAUSE_MENU, MAIN_MENU } GAME_STATES;
 GAME_STATES GAME_STATE = MAIN_MENU;
 
 //Levels
-typedef enum { MENU_LEVEL, HOME_LEVEL, LEVEL_ONE, LEVEL_TWO } level_type;
+typedef enum { MENU_LEVEL, HOME_LEVEL, LEVEL_ONE, LEVEL_TWO, LEVEL_THREE } level_type;
 level_type current_level;
 
 //Used for determing where collisions are
@@ -2200,7 +2200,7 @@ void Button::action()
 		break;
 	case NEW:
 		GAME_STATE = PLAYING;
-		current_level = HOME_LEVEL; //!!!
+		current_level = LEVEL_THREE; //!!!
 		break;
 	case LOAD:
 		load_game.open("SavedGame.txt");
@@ -2963,6 +2963,16 @@ private:
 	Tile *leveltwo_level[3540];
 	textures leveltwo_level_blueprint[3540];
 
+	//Level Three - Air
+	int levelthree_texelw;
+	int levelthree_texelh;
+	int levelthree_level_width;
+	int levelthree_level_height;
+	int levelthree_level_size;
+	SDL_Texture *levelthree_level_background[2];
+	Tile *levelthree_level[3540];
+	textures levelthree_level_blueprint[3120];
+
 #pragma region Textures
 	//Textures
 	SDL_Texture *wall_ne1;
@@ -3062,6 +3072,7 @@ private:
 	SDL_Texture *cat;
 	SDL_Texture *far_background;
 	SDL_Texture *fire_background;
+	SDL_Texture *air_background;
 	SDL_Texture *flare;
 	SDL_Texture *grass;
 	SDL_Texture *near_background;
@@ -3176,6 +3187,7 @@ void LevelManager::loadTextures()
 	cat = loadImage("Media/Other/Cat's Eyes.png");
 	far_background = loadImage("Media/Other/Far Background.png");
 	fire_background = loadImage("Media/Other/fire background.png");
+	air_background = loadImage("Media/Other/air background.png");
 	flare = loadImage("Media/Other/Flare.png");
 	grass = loadImage("Media/Other/Grass.png");
 	near_background = loadImage("Media/Other/Near Background.png");
@@ -3247,6 +3259,16 @@ void LevelManager::initializeLevels()
 	leveltwo_level_background[1] = NULL;
 	loadLevelFromText("Media/Levels/leveltwo.txt", LEVEL_TWO);
 
+	//level three - air
+	levelthree_texelw = 40;
+	levelthree_texelh = 40;
+	levelthree_level_width = 260;
+	levelthree_level_height = 12;
+	levelthree_level_size = levelthree_level_width*levelthree_level_height;
+	levelthree_level_background[0] = air_background;
+	levelthree_level_background[1] = NULL;
+	loadLevelFromText("Media/Levels/levelthree.txt", LEVEL_THREE);
+
 	//main menu
 	levelmenu_texelw = 40;
 	levelmenu_texelh = 40;
@@ -3310,6 +3332,20 @@ void LevelManager::loadLevel(level_type level)
 		LevelSize = leveltwo_level_width*home_level_height;
 		Background = leveltwo_level_background;
 		music = Mix_LoadMUS( "Media/Music/level_three.wav" );
+		Mix_PlayMusic(music, -1);
+		break;
+
+	case LEVEL_THREE:
+		buildLevel(levelthree_level_blueprint, levelthree_level, levelthree_level_height, levelthree_level_width, levelthree_texelw, levelthree_texelh);
+
+		CurrentLevel = levelthree_level;
+		texel_width = levelthree_texelw;
+		texel_height = levelthree_texelh;
+		LevelWidth = levelthree_level_width*home_texelw;
+		LevelHeight = levelthree_level_height*home_texelh;
+		LevelSize = levelthree_level_width*home_level_height;
+		Background = levelthree_level_background;
+		music = Mix_LoadMUS( "Media/Music/level_four.wav" );
 		Mix_PlayMusic(music, -1);
 		break;
 
@@ -3715,6 +3751,8 @@ void LevelManager::loadLevelFromText(std::string filename, level_type level)
 				levelone_level_blueprint[numberOfTiles] = stringToEnum(tempEnum);
 			else if (level == LEVEL_TWO)
 				leveltwo_level_blueprint[numberOfTiles] = stringToEnum(tempEnum);
+			else if (level == LEVEL_THREE)
+				levelthree_level_blueprint[numberOfTiles] = stringToEnum(tempEnum);
 			else if (level == MENU_LEVEL)
 				levelmenu_level_blueprint[numberOfTiles] = stringToEnum(tempEnum);
 			tempEnum = "";
