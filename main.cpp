@@ -2867,7 +2867,7 @@ void DoorManager::deleteAll()
 {
 	for (int i = 0; i < doors.size(); i++)
 	{
-		doors.erase(doors.begin() + i);
+		doors.erase(doors.begin());
 	}
 }
 #pragma endregion DoorManager Class
