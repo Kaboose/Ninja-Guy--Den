@@ -61,6 +61,7 @@ Mix_Chunk *lizard = NULL;
 Mix_Chunk *ice = NULL;
 Mix_Chunk *earth = NULL;
 Mix_Chunk *air = NULL;
+Mix_Chunk *bird = NULL;
 
 //Read the LazyFoo tutorials to better understand
 SDL_Window* window = NULL;
@@ -1557,6 +1558,8 @@ void Enemy::update()
 			Mix_PlayChannel(-1, lizard, 0);
 		else if( type == GRIZZOLAR_BEAR)
 			Mix_PlayChannel(-1, burr, 0);
+		else if( type == BIRD)
+		    Miz_PlayChannel(-1, bird, 0);
 		yvel += 1;
 		angle += 10;
 	}
@@ -3828,6 +3831,7 @@ bool loadFiles()
 	ice = Mix_LoadWAV("Media/Music/ice.wav");
 	air = Mix_LoadWAV("Media/Music/air.wav");
 	earth = Mix_LoadWAV("Media/Music/earth.wav");
+	bird = Mix_LoadWAV("Media/Music/bird.wav");
 
 	textArea = loadImage("Media/Fonts/textbox.png");
 
