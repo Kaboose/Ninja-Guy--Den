@@ -58,6 +58,9 @@ Mix_Chunk *chest = NULL;
 Mix_Chunk *fire = NULL;
 Mix_Chunk *burr = NULL;
 Mix_Chunk *lizard = NULL;
+Mix_Chunk *ice = NULL;
+Mix_Chunk *earth = NULL;
+Mix_Chunk *air = NULL;
 
 //Read the LazyFoo tutorials to better understand
 SDL_Window* window = NULL;
@@ -264,7 +267,19 @@ public:
 
 void Spell::init(SDL_Texture* texture, int x, int y, float xvel, float yvel, SDL_RendererFlip flip, spell_type type, SDL_Rect* clip)
 {
-	Mix_PlayChannel(-1, fire, 0);
+
+	if(type == FIRE)
+	    Mix_PlayChannel(-1, fire, 0);
+	else if(type == WIND)
+		Mix_PlayChannel(-1, air, 0);
+	else if(type == ICE)
+		Mix_PlayChannel(-1, ice, 0);
+	else if(type == EARTH)
+	    Mix_PlayChannel(-1, earth, 0);
+
+
+
+
 	this->texture = texture;
 	this->xvel = xvel;
 	this->yvel = yvel;
@@ -3810,6 +3825,9 @@ bool loadFiles()
 	fire = Mix_LoadWAV("Media/Music/fire.wav");
 	burr = Mix_LoadWAV("Media/Music/burr.wav");
 	lizard = Mix_LoadWAV("Media/Music/burr.wav");
+	ice = Mix_LoadWAV("Media/Music/ice.wav");
+	air = Mix_LoadWAV("Media/Music/air.wav");
+	earth = Mix_LoadWAV("Media/Music/earth.wav");
 
 	textArea = loadImage("Media/Fonts/textbox.png");
 
