@@ -2563,7 +2563,7 @@ void AIManager::deleteAll()
 {
 	for (int i = 0; i < bots.size(); i++)
 	{
-		bots.erase(bots.begin() + i);
+		bots.erase(bots.begin());
 	}
 }
 #pragma endregion AIManager Class
@@ -2752,7 +2752,7 @@ void TreasureChestManager::deleteAll()
 {
 	for (int i = 0; i < treasure_chests.size(); i++)
 	{
-		treasure_chests.erase(treasure_chests.begin() + i);
+		treasure_chests.erase(treasure_chests.begin());
 	}
 }
 #pragma endregion TreasureChestManager Class
