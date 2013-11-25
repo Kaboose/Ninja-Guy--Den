@@ -2200,7 +2200,7 @@ void Button::action()
 		break;
 	case NEW:
 		GAME_STATE = PLAYING;
-		current_level = LEVEL_TWO; //!!!
+		current_level = HOME_LEVEL; //!!!
 		break;
 	case LOAD:
 		load_game.open("SavedGame.txt");
