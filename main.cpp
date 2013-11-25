@@ -22,7 +22,7 @@ typedef enum { PLAYING, AI_SPEAKING, PAUSE_MENU, MAIN_MENU } GAME_STATES;
 GAME_STATES GAME_STATE = MAIN_MENU;
 
 //Levels
-typedef enum { MENU_LEVEL, HOME_LEVEL, LEVEL_ONE } level_type;
+typedef enum { MENU_LEVEL, HOME_LEVEL, LEVEL_ONE, LEVEL_TWO } level_type;
 level_type current_level;
 
 //Used for determing where collisions are
@@ -2200,7 +2200,7 @@ void Button::action()
 		break;
 	case NEW:
 		GAME_STATE = PLAYING;
-		current_level = HOME_LEVEL;
+		current_level = LEVEL_TWO; //!!!
 		break;
 	case LOAD:
 		load_game.open("SavedGame.txt");
@@ -2933,7 +2933,7 @@ private:
 	Tile *home_level[780];
 	textures home_level_blueprint[780];
 
-	//Level One
+	//Level One - Grass
 	int levelone_texelw;
 	int levelone_texelh;
 	int levelone_level_width;
@@ -2952,6 +2952,16 @@ private:
 	SDL_Texture *levelmenu_level_background[2];
 	Tile *levelmenu_level[240];
 	textures levelmenu_level_blueprint[240];
+
+	//Level Two - Fire
+	int leveltwo_texelw;
+	int leveltwo_texelh;
+	int leveltwo_level_width;
+	int leveltwo_level_height;
+	int leveltwo_level_size;
+	SDL_Texture *leveltwo_level_background[2];
+	Tile *leveltwo_level[3540];
+	textures leveltwo_level_blueprint[3540];
 
 #pragma region Textures
 	//Textures
@@ -3051,6 +3061,7 @@ private:
 
 	SDL_Texture *cat;
 	SDL_Texture *far_background;
+	SDL_Texture *fire_background;
 	SDL_Texture *flare;
 	SDL_Texture *grass;
 	SDL_Texture *near_background;
@@ -3089,68 +3100,68 @@ void LevelManager::loadTextures()
 	wall_se5 = loadImage("Media/Walls/Wall 5 SE.png");
 	wall_sw5 = loadImage("Media/Walls/Wall 5 SW.png");
 
-	fire_wall_ne1 = loadImage("Media/Walls/Wall 1 NE.png fire");
-	fire_wall_nw1 = loadImage("Media/Walls/Wall 1 NW.png fire");
-	fire_wall_se1 = loadImage("Media/Walls/Wall 1 SE.png fire");
-	fire_wall_sw1 = loadImage("Media/Walls/Wall 1 SW.png fire");
-	fire_wall_ne2 = loadImage("Media/Walls/Wall 2 NE.png fire");
-	fire_wall_nw2 = loadImage("Media/Walls/Wall 2 NW.png fire");
-	fire_wall_se2 = loadImage("Media/Walls/Wall 2 SE.png fire");
-	fire_wall_sw2 = loadImage("Media/Walls/Wall 2 SW.png fire");
-	fire_wall_ne3 = loadImage("Media/Walls/Wall 3 NE.png fire");
-	fire_wall_nw3 = loadImage("Media/Walls/Wall 3 NW.png fire");
-	fire_wall_se3 = loadImage("Media/Walls/Wall 3 SE.png fire");
-	fire_wall_sw3 = loadImage("Media/Walls/Wall 3 SW.png fire");
-	fire_wall_ne4 = loadImage("Media/Walls/Wall 4 NE.png fire");
-	fire_wall_nw4 = loadImage("Media/Walls/Wall 4 NW.png fire");
-	fire_wall_se4 = loadImage("Media/Walls/Wall 4 SE.png fire");
-	fire_wall_sw4 = loadImage("Media/Walls/Wall 4 SW.png fire");
-	fire_wall_ne5 = loadImage("Media/Walls/Wall 5 NE.png fire");
-	fire_wall_nw5 = loadImage("Media/Walls/Wall 5 NW.png fire");
-	fire_wall_se5 = loadImage("Media/Walls/Wall 5 SE.png fire");
-	fire_wall_sw5 = loadImage("Media/Walls/Wall 5 SW.png fire");
+	fire_wall_ne1 = loadImage("Media/Walls/Wall 1 NE fire.png");
+	fire_wall_nw1 = loadImage("Media/Walls/Wall 1 NW fire.png");
+	fire_wall_se1 = loadImage("Media/Walls/Wall 1 SE fire.png");
+	fire_wall_sw1 = loadImage("Media/Walls/Wall 1 SW fire.png");
+	fire_wall_ne2 = loadImage("Media/Walls/Wall 2 NE fire.png");
+	fire_wall_nw2 = loadImage("Media/Walls/Wall 2 NW fire.png");
+	fire_wall_se2 = loadImage("Media/Walls/Wall 2 SE fire.png");
+	fire_wall_sw2 = loadImage("Media/Walls/Wall 2 SW fire.png");
+	fire_wall_ne3 = loadImage("Media/Walls/Wall 3 NE fire.png");
+	fire_wall_nw3 = loadImage("Media/Walls/Wall 3 NW fire.png");
+	fire_wall_se3 = loadImage("Media/Walls/Wall 3 SE fire.png");
+	fire_wall_sw3 = loadImage("Media/Walls/Wall 3 SW fire.png");
+	fire_wall_ne4 = loadImage("Media/Walls/Wall 4 NE fire.png");
+	fire_wall_nw4 = loadImage("Media/Walls/Wall 4 NW fire.png");
+	fire_wall_se4 = loadImage("Media/Walls/Wall 4 SE fire.png");
+	fire_wall_sw4 = loadImage("Media/Walls/Wall 4 SW fire.png");
+	fire_wall_ne5 = loadImage("Media/Walls/Wall 5 NE fire.png");
+	fire_wall_nw5 = loadImage("Media/Walls/Wall 5 NW fire.png");
+	fire_wall_se5 = loadImage("Media/Walls/Wall 5 SE fire.png");
+	fire_wall_sw5 = loadImage("Media/Walls/Wall 5 SW fire.png");
 
-	ice_wall_ne1 = loadImage("Media/Walls/Wall 1 NE.png ice");
-	ice_wall_nw1 = loadImage("Media/Walls/Wall 1 NW.png ice");
-	ice_wall_se1 = loadImage("Media/Walls/Wall 1 SE.png ice");
-	ice_wall_sw1 = loadImage("Media/Walls/Wall 1 SW.png ice");
-	ice_wall_ne2 = loadImage("Media/Walls/Wall 2 NE.png ice");
-	ice_wall_nw2 = loadImage("Media/Walls/Wall 2 NW.png ice");
-	ice_wall_se2 = loadImage("Media/Walls/Wall 2 SE.png ice");
-	ice_wall_sw2 = loadImage("Media/Walls/Wall 2 SW.png ice");
-	ice_wall_ne3 = loadImage("Media/Walls/Wall 3 NE.png ice");
-	ice_wall_nw3 = loadImage("Media/Walls/Wall 3 NW.png ice");
-	ice_wall_se3 = loadImage("Media/Walls/Wall 3 SE.png ice");
-	ice_wall_sw3 = loadImage("Media/Walls/Wall 3 SW.png ice");
-	ice_wall_ne4 = loadImage("Media/Walls/Wall 4 NE.png ice");
-	ice_wall_nw4 = loadImage("Media/Walls/Wall 4 NW.png ice");
-	ice_wall_se4 = loadImage("Media/Walls/Wall 4 SE.png ice");
-	ice_wall_sw4 = loadImage("Media/Walls/Wall 4 SW.png ice");
-	ice_wall_ne5 = loadImage("Media/Walls/Wall 5 NE.png ice");
-	ice_wall_nw5 = loadImage("Media/Walls/Wall 5 NW.png ice");
-	ice_wall_se5 = loadImage("Media/Walls/Wall 5 SE.png ice");
-	ice_wall_sw5 = loadImage("Media/Walls/Wall 5 SW.png ice");
+	ice_wall_ne1 = loadImage("Media/Walls/Wall 1 NE ice.png");
+	ice_wall_nw1 = loadImage("Media/Walls/Wall 1 NW ice.png");
+	ice_wall_se1 = loadImage("Media/Walls/Wall 1 SE ice.png");
+	ice_wall_sw1 = loadImage("Media/Walls/Wall 1 SW ice.png");
+	ice_wall_ne2 = loadImage("Media/Walls/Wall 2 NE ice.png");
+	ice_wall_nw2 = loadImage("Media/Walls/Wall 2 NW ice.png");
+	ice_wall_se2 = loadImage("Media/Walls/Wall 2 SE ice.png");
+	ice_wall_sw2 = loadImage("Media/Walls/Wall 2 SW ice.png");
+	ice_wall_ne3 = loadImage("Media/Walls/Wall 3 NE ice.png");
+	ice_wall_nw3 = loadImage("Media/Walls/Wall 3 NW ice.png");
+	ice_wall_se3 = loadImage("Media/Walls/Wall 3 SE ice.png");
+	ice_wall_sw3 = loadImage("Media/Walls/Wall 3 SW ice.png");
+	ice_wall_ne4 = loadImage("Media/Walls/Wall 4 NE ice.png");
+	ice_wall_nw4 = loadImage("Media/Walls/Wall 4 NW ice.png");
+	ice_wall_se4 = loadImage("Media/Walls/Wall 4 SE ice.png");
+	ice_wall_sw4 = loadImage("Media/Walls/Wall 4 SW ice.png");
+	ice_wall_ne5 = loadImage("Media/Walls/Wall 5 NE ice.png");
+	ice_wall_nw5 = loadImage("Media/Walls/Wall 5 NW ice.png");
+	ice_wall_se5 = loadImage("Media/Walls/Wall 5 SE ice.png");
+	ice_wall_sw5 = loadImage("Media/Walls/Wall 5 SW ice.png");
 
-	air_wall_ne1 = loadImage("Media/Walls/Wall 1 NE.png air");
-	air_wall_nw1 = loadImage("Media/Walls/Wall 1 NW.png air");
-	air_wall_se1 = loadImage("Media/Walls/Wall 1 SE.png air");
-	air_wall_sw1 = loadImage("Media/Walls/Wall 1 SW.png air");
-	air_wall_ne2 = loadImage("Media/Walls/Wall 2 NE.png air");
-	air_wall_nw2 = loadImage("Media/Walls/Wall 2 NW.png air");
-	air_wall_se2 = loadImage("Media/Walls/Wall 2 SE.png air");
-	air_wall_sw2 = loadImage("Media/Walls/Wall 2 SW.png air");
-	air_wall_ne3 = loadImage("Media/Walls/Wall 3 NE.png air");
-	air_wall_nw3 = loadImage("Media/Walls/Wall 3 NW.png air");
-	air_wall_se3 = loadImage("Media/Walls/Wall 3 SE.png air");
-	air_wall_sw3 = loadImage("Media/Walls/Wall 3 SW.png air");
-	air_wall_ne4 = loadImage("Media/Walls/Wall 4 NE.png air");
-	air_wall_nw4 = loadImage("Media/Walls/Wall 4 NW.png air");
-	air_wall_se4 = loadImage("Media/Walls/Wall 4 SE.png air");
-	air_wall_sw4 = loadImage("Media/Walls/Wall 4 SW.png air");
-	air_wall_ne5 = loadImage("Media/Walls/Wall 5 NE.png air");
-	air_wall_nw5 = loadImage("Media/Walls/Wall 5 NW.png air");
-	air_wall_se5 = loadImage("Media/Walls/Wall 5 SE.png air");
-	air_wall_sw5 = loadImage("Media/Walls/Wall 5 SW.png air");
+	air_wall_ne1 = loadImage("Media/Walls/Wall 1 NE air.png");
+	air_wall_nw1 = loadImage("Media/Walls/Wall 1 NW air.png");
+	air_wall_se1 = loadImage("Media/Walls/Wall 1 SE air.png");
+	air_wall_sw1 = loadImage("Media/Walls/Wall 1 SW air.png");
+	air_wall_ne2 = loadImage("Media/Walls/Wall 2 NE air.png");
+	air_wall_nw2 = loadImage("Media/Walls/Wall 2 NW air.png");
+	air_wall_se2 = loadImage("Media/Walls/Wall 2 SE air.png");
+	air_wall_sw2 = loadImage("Media/Walls/Wall 2 SW air.png");
+	air_wall_ne3 = loadImage("Media/Walls/Wall 3 NE air.png");
+	air_wall_nw3 = loadImage("Media/Walls/Wall 3 NW air.png");
+	air_wall_se3 = loadImage("Media/Walls/Wall 3 SE air.png");
+	air_wall_sw3 = loadImage("Media/Walls/Wall 3 SW air.png");
+	air_wall_ne4 = loadImage("Media/Walls/Wall 4 NE air.png");
+	air_wall_nw4 = loadImage("Media/Walls/Wall 4 NW air.png");
+	air_wall_se4 = loadImage("Media/Walls/Wall 4 SE air.png");
+	air_wall_sw4 = loadImage("Media/Walls/Wall 4 SW air.png");
+	air_wall_ne5 = loadImage("Media/Walls/Wall 5 NE air.png");
+	air_wall_nw5 = loadImage("Media/Walls/Wall 5 NW air.png");
+	air_wall_se5 = loadImage("Media/Walls/Wall 5 SE air.png");
+	air_wall_sw5 = loadImage("Media/Walls/Wall 5 SW air.png");
 
 	walk_w1 = loadImage("Media/Walkways/Walkway 1 W.png");
 	walk_e1 = loadImage("Media/Walkways/Walkway 1 E.png");
@@ -3164,6 +3175,7 @@ void LevelManager::loadTextures()
 
 	cat = loadImage("Media/Other/Cat's Eyes.png");
 	far_background = loadImage("Media/Other/Far Background.png");
+	fire_background = loadImage("Media/Other/fire background.png");
 	flare = loadImage("Media/Other/Flare.png");
 	grass = loadImage("Media/Other/Grass.png");
 	near_background = loadImage("Media/Other/Near Background.png");
@@ -3215,7 +3227,7 @@ void LevelManager::initializeLevels()
 	home_level_background[1] = NULL;
 	loadLevelFromText("Media/Levels/levelhome.txt", HOME_LEVEL);
 
-	//level one
+	//level one - grass
 	levelone_texelw = 40;
 	levelone_texelh = 40;
 	levelone_level_width = 295;
@@ -3224,6 +3236,16 @@ void LevelManager::initializeLevels()
 	levelone_level_background[0] = far_background;
 	levelone_level_background[1] = NULL;
 	loadLevelFromText("Media/Levels/levelone.txt", LEVEL_ONE);
+
+	//level two - fire
+	leveltwo_texelw = 40;
+	leveltwo_texelh = 40;
+	leveltwo_level_width = 295;
+	leveltwo_level_height = 12;
+	leveltwo_level_size = leveltwo_level_width*leveltwo_level_height;
+	leveltwo_level_background[0] = fire_background;
+	leveltwo_level_background[1] = NULL;
+	loadLevelFromText("Media/Levels/leveltwo.txt", LEVEL_TWO);
 
 	//main menu
 	levelmenu_texelw = 40;
@@ -3274,6 +3296,20 @@ void LevelManager::loadLevel(level_type level)
 		LevelSize = levelone_level_width*home_level_height;
 		Background = levelone_level_background;
 		music = Mix_LoadMUS( "Media/Music/level_two.wav" );
+		Mix_PlayMusic(music, -1);
+		break;
+
+	case LEVEL_TWO:
+		buildLevel(leveltwo_level_blueprint, leveltwo_level, leveltwo_level_height, leveltwo_level_width, leveltwo_texelw, leveltwo_texelh);
+
+		CurrentLevel = leveltwo_level;
+		texel_width = leveltwo_texelw;
+		texel_height = leveltwo_texelh;
+		LevelWidth = leveltwo_level_width*home_texelw;
+		LevelHeight = leveltwo_level_height*home_texelh;
+		LevelSize = leveltwo_level_width*home_level_height;
+		Background = leveltwo_level_background;
+		music = Mix_LoadMUS( "Media/Music/level_three.wav" );
 		Mix_PlayMusic(music, -1);
 		break;
 
@@ -3677,6 +3713,8 @@ void LevelManager::loadLevelFromText(std::string filename, level_type level)
 				home_level_blueprint[numberOfTiles] = stringToEnum(tempEnum);
 			else if (level == LEVEL_ONE)
 				levelone_level_blueprint[numberOfTiles] = stringToEnum(tempEnum);
+			else if (level == LEVEL_TWO)
+				leveltwo_level_blueprint[numberOfTiles] = stringToEnum(tempEnum);
 			else if (level == MENU_LEVEL)
 				levelmenu_level_blueprint[numberOfTiles] = stringToEnum(tempEnum);
 			tempEnum = "";
